@@ -2,3 +2,5 @@ https://arxiv.org/pdf/2506.16591
 https://arxiv.org/pdf/2507.06849
 https://arxiv.org/pdf/2410.11766
 https://arxiv.org/pdf/2404.15364
+https://github.com/gnuradio/gnuradio/tree/master/gr-dtv acessado 24/04
+https://wiki.gnuradio.org/index.php?title=ATSC acessado 24/04
