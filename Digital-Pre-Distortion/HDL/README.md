@@ -11,15 +11,6 @@ Minimal PicoRV32 AXI SoC prepared as a controller for the DPD project.
 - AXI SPI for debug/control
 - AXI-Lite DPD control/status peripheral
 
-## Removed
-
-- UART bootloader
-- boot manager
-- GPIO
-- I2C
-- timer
-- old DPD placeholder names from the previous iteration
-
 ## Memory map
 
 | Base address | Region |
