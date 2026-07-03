@@ -50,11 +50,3 @@ The CPU can:
 - start capture into ping-pong RAM;
 - read metrics/status/IRQ registers.
 
-## Suggested compile check
-
-```bash
-cd dpd_soc_min
-iverilog -g2012 -o sim_check.vvp $(cat rtl/filelist.f)
-```
-
-If your toolchain is strict Verilog-2001, use `-g2005-sv` or synthesize with Yosys after replacing the placeholder `mac_engine.v` with the target implementation.
