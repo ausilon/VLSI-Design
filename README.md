@@ -237,6 +237,53 @@ floorplan e integração preliminar. Ele ainda não deve ser tratado como tapeou
 final, pois falta fechar padframe, conectividade funcional completa, LVS/STA de
 chip completo e a estratégia definitiva de IO/alimentação.
 
+O floorplan foi refinado a partir de uma proposta manual de organização de
+macros. A intenção foi manter o caminho rápido próximo ao `GMPengine`, posicionar
+RAM e bancos de coeficientes entre inferência e treinamento, deixar o `MACcore`
+na região inferior do núcleo e agrupar controle, métricas e periféricos na
+lateral esquerda. Essa distribuição reduz cruzamentos desnecessários entre
+datapath e controle e deixa espaço para uma futura etapa de padframe.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.png" width="420"><br>
+      <sub>Floorplan manual preliminar (<a href="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.pdf">PDF</a>).</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_tapeout_top_full05_macro_labeled.png" width="420"><br>
+      <sub>Floorplan macro-level gerado no OpenLane.</sub>
+    </td>
+  </tr>
+</table>
+
+A tabela seguinte resume os resultados físicos usados como referência nesta
+etapa. Os blocos menores e as macros de memória chegaram a DRC/LVS limpos. O
+`GMPengine` e o `MACcore` também foram fechados como macros individuais. O
+`soc_top_scaffold` gerou GDS e passou DRC, mas o LVS ainda fica aberto porque o
+top atual é uma montagem física de macros, sem padframe e sem toda a
+conectividade funcional final.
+
+| design_name | run | status | runtime | DIEAREA mm2 | cells | Cell/mm2 | WNS ns | AND | DFF | NAND | NOR | OR | XOR | XNOR | MUX | Fmax MHz | DRC | LVS |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| picorv32 | `signoff_100m_01` | signoff ok | 0h11m28s | 0.377 | 10114 | 26818.6 | n/a | 344 | 1704 | 498 | 269 | 459 | 34 | 75 | 2263 | 100.0 | 0 | 0 |
+| axi_ctrl | `signoff_100m_01` | signoff ok | 0h03m30s | 0.640 | 1713 | 2676.6 | n/a | 129 | 255 | 3 | 23 | 80 | 0 | 0 | 277 | 100.0 | 0 | 0 |
+| metric_engine | `signoff_100m_01` | signoff ok | 0h03m28s | 0.116 | 2593 | 22280.8 | n/a | 238 | 187 | 298 | 173 | 307 | 117 | 197 | 7 | 100.0 | 0 | 0 |
+| peripherals | `signoff_100m_01` | signoff ok | 0h01m15s | 0.044 | 755 | 17328.1 | n/a | 64 | 186 | 19 | 63 | 34 | 0 | 5 | 87 | 100.0 | 0 | 0 |
+| capture_ram | `macro_route_100m_01` | macro ok | 0h04m02s | 4.140 | 330 | 79.7 | n/a | 19 | 14 | 5 | 7 | 11 | 0 | 0 | 6 | 100.0 | 0 | 0 |
+| coef_bank | `macro_route_100m_01` | macro ok | 0h01m25s | 0.845 | 152 | 179.9 | n/a | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 50 | 100.0 | 0 | 0 |
+| gmp_engine | `signoff_100m_01` | signoff ok via continue | 12h42m04s | 12.206 | 328576 | 26919.2 | -92.630 | 38925 | 2509 | 48863 | 39185 | 41983 | 19584 | 36469 | 2595 | 90.9 | 0 | 0 |
+| mac_engine | `signoff_100m_no_prefill_01` | signoff ok | 2h11m45s | 3.987 | 91948 | 23062.2 | n/a | 5823 | 11329 | 6296 | 6840 | 7199 | 2487 | 5578 | 10968 | 100.0 | 0 | 0 |
+| soc_top_scaffold | `tapeout_full_05` | DRC ok, LVS aberto | 1h34m10s | 51.000 | 8 | 0.2 | 0.000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 90.9 | 0 | 35 |
+
+O campo `DIEAREA` dos blocos menores vem do LEF gerado para cada hard macro.
+Para `capture_ram`, `coef_bank` e `soc_top_scaffold`, a densidade de células não
+representa a ocupação lógica real, pois há macros de memória, obstruções e área
+reservada para integração física. O WNS do `gmp_engine` também deve ser tratado
+com cautela: o bloco passou por continuação manual após problemas de roteamento
+pesado, e a próxima etapa ainda é buscar margem acima de 96 MHz para sustentar
+24 MS/s com o intervalo de iniciação atual.
+
 ---
 
 # Documentação Principal
