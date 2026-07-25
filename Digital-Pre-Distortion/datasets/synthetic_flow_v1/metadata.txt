@@ -1,0 +1,11 @@
+name=synthetic_flow_v1
+created=2026-06-22
+sample_width_bits=16
+packed_iq_word_bits=32
+packed_iq_word_format={i[15:0],q[15:0]}
+capture_word_format={ref_i[15:0],ref_q[15:0],fb_i[15:0],fb_q[15:0]}
+nominal_channel_bandwidth_hz=6000000
+sample_count=32
+recommended_first_capture_len=15
+recommended_feedback_delay=0
+recommended_compare_file=expected_capture_delay0.csv

@@ -1,30 +1,109 @@
-# VLSI-Design
+# VLSI Implementation of DPD for Next-Generation Digital TV Transmitters
 
-Repositório do projeto final do curso de **Residência em TIC 41 – Programa de Desenvolvimento de Competências em Sistemas Digitais (Programa CI Digital)**.  
-O objetivo deste projeto é desenvolver e validar técnicas de design de sistemas digitais para sinais OFDM, incluindo modelagem de amplificadores e otimização de algoritmos de pre-distorsão digital (DPD).
+Este repositório documenta uma prova de conceito acadêmica de uma implementação
+em HDL de um sistema de pre-distorção digital (DPD) para transmissores de TV
+digital de próxima geração, com foco em sinais OFDM de 6 MHz, validação
+algorítmica com GNU Radio/OpenDPD e avaliação física em SKY130/OpenLane.
 
-## Passos do Projeto
+O projeto combina três frentes:
 
-1. **Criar dataset baseband complexo OFDM personalizável com GNU Radio**  
-   Desenvolver um conjunto de sinais OFDM que possa ser ajustado em parâmetros como número de subportadoras, modulação e taxa de amostragem, utilizando o GNU Radio.
+- geração e preparação de datasets IQ para validação;
+- implementação HDL do caminho de inferência, métricas e treinamento;
+- síntese, floorplan e montagem física preliminar em SKY130.
 
-2. **Usar scripts Python para realizar a validação inicial**  
-   Validar a integridade do dataset e verificar a conformidade dos sinais gerados com as especificações do projeto, usando scripts automatizados em Python.
+## Natureza do Trabalho
 
-3. **Criar um modelo de amplificador distorcido**  
-   Modelar matematicamente o comportamento de um amplificador não linear que introduz distorção nos sinais OFDM, preparando o sistema para simulações de pre-distorsão.
+Este trabalho deve ser lido como uma prova de conceito técnico-científica. O
+objetivo principal é demonstrar a viabilidade de uma arquitetura DPD integrada,
+com inferência, métricas, captura e treinamento interno, partindo de um fluxo de
+software até uma avaliação física preliminar.
 
-4. **Encontrar o melhor algoritmo e parâmetros com openDPD**  
-   Aplicar técnicas de pre-distorsão digital utilizando o openDPD, ajustando parâmetros para minimizar a distorção do sinal e maximizar a eficiência do amplificador.
+A maior parte do fluxo foi construída com ferramentas abertas ou acessíveis em
+ambiente acadêmico/estudantil:
 
-5. **Iniciar desenvolvimento HDL**  
-   Implementar partes do sistema em **HDL (VHDL ou Verilog)** para futuras sínteses em FPGA ou ASIC, com foco em processamento digital de sinais em tempo real.
+- GNU Radio para geração e manipulação de sinais baseband;
+- Python/NumPy para conversão, análise e preparação dos datasets;
+- OpenDPD como referência algorítmica de treinamento;
+- Verilog/SystemVerilog para implementação e verificação HDL;
+- Questa Intel FPGA Edition para simulação HDL;
+- OpenLane/OpenROAD/Yosys/Magic/KLayout com PDK SKY130 para avaliação física.
 
-## Tecnologias Utilizadas
+Assim, os resultados apresentados não devem ser interpretados como um produto
+industrial final ou um tapeout completo. Eles representam uma trilha
+reprodutível de validação de conceito, adequada para discutir arquitetura,
+quantização, throughput, custo em área, gargalos físicos e próximos passos.
 
-- **GNU Radio** – geração e manipulação de sinais OFDM  
-- **Python** – scripts de validação e análise de dados  
-- **openDPD** – otimização de pre-distorsão digital  
-- **HDL (VHDL/Verilog)** – implementação de hardware digital  
+## Estado Atual
 
-## Estrutura do Repositório
+O desenvolvimento local avançou além da versão inicial deste repositório. A
+branch de documentação consolida o estado atual:
+
+- `GMPengine`: motor de inferência GMP com 39 termos e coeficientes complexos
+  Q2.16;
+- `MetricEngine`: métricas de potência, erro REF-FB, drift DPD-REF e clipping;
+- `MACcore`: treinamento interno baseado em NLMS, preservando a base GMP;
+- `dpd_top`: fluxo integrado com bypass, captura, treino, troca de banco de
+  coeficientes e pedido de retreinamento;
+- datasets sintético, ATSC 3.0/A/322 e coeficientes exportados do OpenDPD;
+- wrappers e configurações OpenLane/SKY130 para macros físicas;
+- montagem física preliminar do SoC em nível de macros.
+
+## Organização
+
+```text
+Digital-Pre-Distortion/
+├── HDL/
+│   ├── rtl/          HDL final desta prova de conceito
+│   ├── tb/           testbenches SystemVerilog
+│   └── sim/          scripts .do e vetores pequenos de simulação
+├── datasets/         datasets de reprodução selecionados
+├── openlane/         projetos OpenLane sem runs compilados
+├── scripts/          conversão/exportação de dados
+└── docs/             artigo, figuras, referências e log técnico
+```
+
+## Política de Versionamento
+
+São versionados arquivos de projeto: HDL, testbenches, scripts, configurações,
+documentação, figuras essenciais e datasets necessários para reprodução.
+
+Não são versionados diretórios `runs/` do OpenLane, bibliotecas `work/` do
+Questa, arquivos `.wlf`, GDS/LEF/SPICE/SDF gerados, logs longos, caches e
+binários compilados.
+
+## Resultado Físico Preliminar
+
+A implementação física ainda não é um chip pronto para foundry. O estado atual é
+um scaffold macro-level útil para avaliação de área, floorplan e documentação.
+Essa distinção é importante: o projeto já produz evidências físicas em SKY130,
+mas ainda precisa de padframe, conectividade completa, fechamento de timing,
+LVS/STA final e revisão de integração antes de ser tratado como tapeout.
+
+Resultado consolidado até aqui:
+
+- macros menores com DRC/LVS limpos;
+- `GMPengine` e `MACcore` sintetizados como blocos críticos;
+- top físico preliminar com Magic DRC limpo;
+- LVS do top ainda aberto porque o padframe e a conectividade funcional completa
+  ainda não foram fechados.
+
+O `GMPengine` atual opera com iniciação de 4 ciclos por amostra. Com o resultado
+físico preliminar de aproximadamente 90,9 MHz, o throughput ativo fica em torno
+de 22,7 Msps. A meta de 24 Msps exige pelo menos 96 MHz ou uma revisão
+microarquitetural para reduzir o intervalo de iniciação.
+
+## Documentação Principal
+
+- [Arquitetura HDL](Digital-Pre-Distortion/HDL/README.md)
+- [Datasets](Digital-Pre-Distortion/datasets/README.md)
+- [Fluxo OpenLane/SKY130](Digital-Pre-Distortion/openlane/README.md)
+- [Estado técnico](Digital-Pre-Distortion/docs/status.md)
+- [Log técnico v3](Digital-Pre-Distortion/docs/project_log_v3.md)
+
+## Nota Sobre Evolução
+
+Durante o desenvolvimento existiram versões intermediárias, como `rtl_v2`,
+`simv2` e snapshots específicos de OpenLane. Nesta branch, a estrutura pública
+mantém apenas a versão final selecionada para revisão. A evolução do projeto é
+descrita nos textos técnicos, evitando duplicar código antigo e reduzir a
+clareza da validação.

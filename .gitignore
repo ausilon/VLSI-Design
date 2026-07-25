@@ -1,0 +1,38 @@
+# Simulation build artifacts
+**/work/
+**/sim/work/
+**/simv2/work/
+**/*.wlf
+**/transcript
+**/*.cr.mti
+**/*.mpf
+**/wlft*
+
+# Python/cache artifacts
+**/__pycache__/
+**/*.pyc
+
+# OpenLane generated runs and physical signoff outputs
+**/runs/
+**/tmp/
+**/logs/
+**/reports/
+**/results/
+**/*.odb
+**/*.def
+**/*.gds
+**/*.lef
+**/*.mag
+**/*.spice
+**/*.sdf
+**/*.lib
+
+# Archives/intermediate bundles
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.7z
+
+# Local editor/system files
+**/*~
+**/.DS_Store

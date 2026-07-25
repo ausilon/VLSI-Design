@@ -1,0 +1,50 @@
+{
+    "DESIGN_NAME": "dpd_soc_macro_top",
+    "VERILOG_FILES": "dir::src/dpd_soc_macro_top.v",
+    "VERILOG_FILES_BLACKBOX": "dir::src/macro_blackboxes.v",
+    "CLOCK_PORT": "clk",
+    "CLOCK_NET": "ref::$CLOCK_PORT",
+    "CLOCK_PERIOD": 10,
+    "FP_SIZING": "absolute",
+    "DIE_AREA": "0 0 6800 7500",
+    "CORE_AREA": "200 200 6600 7300",
+    "FP_PIN_ORDER_CFG": "dir::pin_order.cfg",
+    "MACRO_PLACEMENT_CFG": "dir::macro_placement.cfg",
+    "FP_PDN_SKIPTRIM": true,
+    "FP_PDN_CHECK_NODES": false,
+    "FP_PDN_ENABLE_MACROS_GRID": false,
+    "FP_PDN_VOFFSET": 20,
+    "FP_PDN_HOFFSET": 20,
+    "FP_PDN_VPITCH": 180,
+    "FP_PDN_HPITCH": 180,
+    "FP_PDN_VWIDTH": 3,
+    "FP_PDN_HWIDTH": 3,
+    "EXTRA_LEFS": [
+        "/openlane/designs/dpd_gmp_engine_100m/runs/signoff_100m_01/results/signoff/gmp_engine_ol_wrapper.lef",
+        "/openlane/designs/dpd_mac_engine_100m/runs/signoff_100m_no_prefill_01/results/signoff/mac_engine.lef",
+        "/openlane/designs/dpd_pico_100m/runs/signoff_100m_01/results/signoff/picorv32_ol_wrapper.lef",
+        "/openlane/designs/dpd_axi_100m/runs/signoff_100m_01/results/signoff/axi_ctrl_wrapper.lef",
+        "/openlane/designs/dpd_metrics_100m/runs/signoff_100m_01/results/signoff/metric_engine.lef",
+        "/openlane/designs/dpd_peripherals_100m/runs/signoff_100m_01/results/signoff/peripherals_wrapper.lef",
+        "/openlane/designs/dpd_capture_ram_macro_100m/runs/macro_route_100m_01/results/signoff/capture_ram_macro.lef",
+        "/openlane/designs/dpd_coef_bank_macro_100m/runs/macro_route_100m_01/results/signoff/coef_bank_macro.lef"
+    ],
+    "EXTRA_GDS_FILES": [
+        "/openlane/designs/dpd_gmp_engine_100m/runs/signoff_100m_01/results/signoff/gmp_engine_ol_wrapper.gds",
+        "/openlane/designs/dpd_mac_engine_100m/runs/signoff_100m_no_prefill_01/results/signoff/mac_engine.gds",
+        "/openlane/designs/dpd_pico_100m/runs/signoff_100m_01/results/signoff/picorv32_ol_wrapper.gds",
+        "/openlane/designs/dpd_axi_100m/runs/signoff_100m_01/results/signoff/axi_ctrl_wrapper.gds",
+        "/openlane/designs/dpd_metrics_100m/runs/signoff_100m_01/results/signoff/metric_engine.gds",
+        "/openlane/designs/dpd_peripherals_100m/runs/signoff_100m_01/results/signoff/peripherals_wrapper.gds",
+        "/openlane/designs/dpd_capture_ram_macro_100m/runs/macro_route_100m_01/results/signoff/capture_ram_macro.gds",
+        "/openlane/designs/dpd_coef_bank_macro_100m/runs/macro_route_100m_01/results/signoff/coef_bank_macro.gds"
+    ],
+    "pdk::sky130*": {
+        "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+        "FP_CORE_UTIL": 10,
+        "PL_TARGET_DENSITY": 0.20,
+        "scl::sky130_fd_sc_hd": {
+            "CLOCK_PERIOD": 10
+        }
+    }
+}

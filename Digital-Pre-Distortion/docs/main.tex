@@ -1,0 +1,230 @@
+% Declaracao de classe do documento
+\documentclass[journal,comsoc]{IEEEtran}
+
+% Pacotes
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[USenglish,brazilian]{babel}
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{float}
+\usepackage{url}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{flushend}
+\graphicspath{{Figures/}}
+\urlstyle{same}
+\def\UrlBreaks{\do\/\do-\do\_\do\.\do\?\do\&\do\=}
+
+\begin{document}
+\IEEEoverridecommandlockouts
+\bstctlcite{IEEEexample:BSTcontrol}
+
+\title{VLSI Implementation of DPD for Next-Generation Digital TV Transmitters}
+
+\author{\IEEEauthorblockN{Ausilon V. Souza, Tarciso Gregório B. de Bello}\\
+\IEEEauthorblockA{ausilon.souza@mtel.inatel.br, tarciso.gregorio@mtel.inatel.br\\
+Instituto Nacional de Telecomunicações - INATEL}}
+
+\maketitle
+\selectlanguage{brazilian}
+
+\begin{abstract}
+Apresentamos uma arquitetura VLSI para Pré-Distorção Digital (Digital Predistortion -- DPD) aplicada a transmissores de televisão digital de próxima geração. O trabalho considera um fluxo de desenvolvimento orientado ao padrão brasileiro TV 3.0, cuja camada física é baseada em tecnologias da família ATSC 3.0, e adota como cenário inicial um sinal OFDM em banda-base complexa I/Q, canal de 6 MHz e taxa de amostragem de 24 MS/s. A metodologia integra geração de sinais em GNU Radio, modelagem e treinamento em OpenDPD, validação HDL no Questa e preparação para síntese física com OpenLane/SKY130. O algoritmo de referência adotado nesta etapa é um modelo Generalized Memory Polynomial (GMP) com 39 termos, memória igual a 3 e grau não linear até 5, exportado para coeficientes em ponto fixo Q2.16 e validado em HDL com amostras Q1.15. A arquitetura de hardware em desenvolvimento separa o caminho rápido de inferência DPD, implementado por um núcleo GMP pipelineado, do caminho lento de captura, treinamento, atualização de coeficientes e supervisão por PicoRV32.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Digital Predistortion, DPD, VLSI, Digital TV, TV 3.0, GMP, HDL, SKY130, OpenLane, GNU Radio.
+\end{IEEEkeywords}
+
+\IEEEpeerreviewmaketitle
+
+\section{Introdução}
+\IEEEPARstart{O}{} trabalho apresentado neste artigo propõe o desenvolvimento de um hardware dedicado para aplicações em telecomunicações, com foco específico na implementação de um sistema de Pré-Distorção Digital (Digital Predistortion – DPD) em hardware reconfigurável. A arquitetura desenvolvida foi concebida considerando os requisitos impostos pelos sistemas de radiodifusão de televisão digital de nova geração, em especial o padrão TV 3.0, cuja adoção representa um importante avanço tecnológico ao incorporar novas técnicas de modulação, codificação e transmissão de sinais. Nesse contexto, a crescente complexidade dos algoritmos de processamento digital de sinais exige soluções computacionais capazes de operar em tempo real, com elevada eficiência energética e reduzida latência, tornando o desenvolvimento de arquiteturas dedicadas uma alternativa de grande relevância para aplicações práticas.
+
+Uma das premissas fundamentais deste trabalho consiste na adoção de um fluxo de desenvolvimento baseado predominantemente em ferramentas, frameworks e ambientes de desenvolvimento de código aberto (open source). Essa escolha está diretamente relacionada à necessidade de tornar o processo de pesquisa mais acessível, transparente e reprodutível. No campo da microeletrônica e do projeto de circuitos integrados, grande parte das ferramentas de projeto eletrônico (Electronic Design Automation – EDA) é disponibilizada apenas por meio de licenças comerciais de alto custo, geralmente restritas a grandes empresas e centros de pesquisa. Essa realidade representa uma barreira significativa para universidades, laboratórios independentes e pesquisadores, limitando o acesso às tecnologias mais modernas e dificultando a formação de novos profissionais na área.
+
+Nos últimos anos, entretanto, observa-se um crescimento expressivo do ecossistema de ferramentas abertas para projeto de hardware digital. Esse movimento tem possibilitado a realização de fluxos completos de desenvolvimento utilizando soluções livres, abrangendo desde a descrição do hardware até as etapas de síntese lógica, posicionamento físico (placement), roteamento (routing), geração de layout e verificação do projeto. Além de reduzir custos, essa abordagem favorece a reprodutibilidade científica, permitindo que outros pesquisadores validem, reproduzam e estendam os resultados apresentados.
+
+No fluxo de desenvolvimento adotado neste trabalho, a descrição do hardware foi realizada utilizando linguagem HDL, empregando ferramentas da Siemens EDA disponibilizadas por meio de licença acadêmica estudantil. Essa etapa compreende a modelagem funcional da arquitetura, permitindo a descrição dos módulos responsáveis pelo processamento digital de sinais e pela implementação dos algoritmos de pré-distorção digital.
+
+Após a descrição do hardware, as etapas de validação funcional, síntese lógica, planejamento físico (floorplanning), posicionamento dos componentes, roteamento e verificação física foram executadas utilizando o framework OpenLane. Essa plataforma integra diversas ferramentas de código aberto amplamente utilizadas pela comunidade acadêmica e industrial, permitindo a implementação de um fluxo completo de projeto de circuitos digitais voltado para tecnologias CMOS. A utilização do OpenLane demonstra a viabilidade da adoção de soluções abertas em projetos de hardware de elevada complexidade, contribuindo para a democratização do desenvolvimento de circuitos integrados.
+
+A modelagem comportamental do amplificador de potência, bem como o treinamento dos algoritmos de aprendizado de máquina empregados pelo sistema de DPD, foram realizados utilizando o framework OpenDPD. Essa plataforma fornece um ambiente dedicado para pesquisa em pré-distorção digital baseada em técnicas modernas de aprendizado de máquina, permitindo a avaliação de diferentes arquiteturas neurais, algoritmos de treinamento e modelos de compensação de não linearidades presentes em amplificadores de potência de radiofrequência. Dessa forma, o OpenDPD desempenha papel fundamental na etapa de desenvolvimento dos modelos computacionais posteriormente implementados em hardware.
+
+Complementando esse fluxo, a geração, manipulação e validação dos sinais utilizados durante os experimentos foram realizadas com o GNU Radio. Esse framework de código aberto é amplamente empregado em pesquisas envolvendo rádio definido por software (Software Defined Radio – SDR), processamento digital de sinais e sistemas modernos de comunicação. Por meio dele, foi possível gerar os sinais de teste compatíveis com o padrão de televisão digital considerado, além de construir e validar os conjuntos de dados (datasets) utilizados durante o treinamento e a avaliação dos modelos de aprendizado de máquina.
+
+A integração dessas diferentes ferramentas demonstra que é possível estabelecer um fluxo completo de desenvolvimento para sistemas de processamento digital de sinais voltados às telecomunicações utilizando predominantemente tecnologias abertas. Além de reduzir significativamente os custos associados ao desenvolvimento, essa abordagem promove maior transparência metodológica, facilita a reprodutibilidade dos experimentos e incentiva a colaboração entre pesquisadores. Dessa forma, o presente trabalho busca não apenas apresentar uma arquitetura dedicada para implementação de um sistema de DPD aplicado ao contexto da TV 3.0, mas também evidenciar a viabilidade de um ecossistema de desenvolvimento baseado em software livre como alternativa às tradicionais soluções proprietárias empregadas na indústria de microeletrônica.
+
+\section{Objetivo do Projeto}
+O objetivo principal deste trabalho é desenvolver e validar uma arquitetura de DPD em HDL capaz de operar como bloco dedicado em um transmissor de televisão digital de próxima geração. Nesta etapa preliminar, o foco não é ainda apresentar um circuito integrado final, mas consolidar um fluxo técnico que conecte o algoritmo de DPD treinado em ambiente de alto nível à sua implementação em hardware sintetizável. Essa transição é crítica, pois algoritmos de predistorção que apresentam bom desempenho em ponto flutuante podem se tornar inviáveis quando convertidos para ponto fixo, pipeline, bancos de coeficientes, controle de fluxo e restrições de temporização.
+
+Os objetivos específicos atualmente perseguidos são:
+
+\begin{itemize}
+    \item definir um contrato de sinal compatível com transmissões de TV 3.0 em canal de 6 MHz, banda-base complexa I/Q e amostragem de 24 MS/s;
+    \item validar um modelo GMP de referência em OpenDPD, com métricas de NMSE, EVM e ACLR adequadas para comparação entre algoritmo e HDL;
+    \item exportar coeficientes treinados para formato fixo Q2.16 e amostras de entrada/saída para Q1.15;
+    \item implementar em HDL um núcleo GMP completo de 39 termos, com coeficientes complexos e pipeline para throughput de uma amostra por ciclo;
+    \item integrar o núcleo DPD a uma arquitetura de SoC mínimo com controle AXI-Lite, PicoRV32, bancos duplos de coeficientes, captura ping-pong e motor de métricas;
+    \item preparar o código para futura síntese e análise física em tecnologia SKY130 por meio do fluxo OpenLane.
+\end{itemize}
+
+\section{Requisitos do Padrão e Sinal de Referência}
+A especificação brasileira TV 3.0 é tratada neste trabalho como o alvo tecnológico de longo prazo. Os documentos do Fórum SBTVD e os relatórios de laboratório e campo da fase 3 indicam a adoção de uma camada física compatível com a família ATSC 3.0, incluindo conceitos presentes nos documentos A/300, A/321, A/322 e A/324 \cite{sbtvd_og01_physical_layer_2026,sbtvd_tv30_p3_pl_lab_report_2023,sbtvd_tv30_p3_pl_field_report_2024,atsc_a300_2024,atsc_a321_2024,atsc_a322_2024,atsc_a324_2024}. A norma brasileira ABNT NBR 25601:2025 aparece como referência formal de camada física no catálogo da ABNT \cite{abnt_nbr_25601_catalogo}. No contexto regulatório, os decretos federais associados à evolução da televisão digital no Brasil reforçam a relevância de uma plataforma nacional capaz de avaliar tecnologias de transmissão e recepção compatíveis com a nova geração do sistema \cite{planalto_decreto_11484_2023,planalto_decreto_12595_2025}.
+
+Para que o estudo pudesse avançar de forma controlada antes da disponibilidade de toda a cadeia de transmissão TV 3.0 em hardware, foi adotado um sinal OFDM de referência inspirado no perfil físico ATSC 3.0 A/322. O dataset utilizado na etapa mais recente foi gerado para uma configuração de 8K, 256-QAM, canal de 6 MHz e taxa de amostragem de 24 MS/s. Essa escolha preserva a ordem de grandeza de oversampling necessária ao DPD e evita subdimensionar o problema de distorção não linear. O arquivo de trabalho empregado no OpenDPD recebeu a identificação \texttt{ATSC3\_A322\_VV031\_8K\_256QAM\_FS24M\_ALIGNED}, indicando que o sinal foi alinhado para treinamento e testado com um modelo de PA mais rígido.
+
+Do ponto de vista de hardware, todas as amostras são tratadas como banda-base complexa. A parte real do sinal corresponde ao canal I e a parte imaginária ao canal Q. No HDL, esse contrato é expresso por portas separadas \texttt{sample\_i\_in} e \texttt{sample\_q\_in}, e a saída do predistor segue a mesma estrutura por meio de \texttt{sample\_i\_out} e \texttt{sample\_q\_out}. A quantização adotada nesta etapa é Q1.15 para amostras I/Q signed de 16 bits e Q2.16 para coeficientes signed de 18 bits. Essa escolha mantém compatibilidade com a validação em OpenDPD e fornece uma primeira base para estimar custo de multiplicadores, acumuladores e saturadores em uma tecnologia CMOS aberta.
+
+\section{Metodologia de Desenvolvimento}
+O fluxo metodológico combina quatro ambientes principais. O GNU Radio é usado para geração e manipulação de sinais em banda-base, permitindo que arquivos de transporte e configurações OFDM sejam convertidos em amostras I/Q observáveis e reutilizáveis \cite{gnuradio_project}. O OpenDPD é empregado para modelagem do amplificador de potência, treinamento do DPD e extração de métricas de desempenho, com base em uma infraestrutura aberta que permite comparar modelos de DPD de forma reprodutível \cite{wu_opendpd_2024,opendpd_repository}. O HDL é escrito e validado no Questa, permitindo simulações determinísticas dos módulos de datapath, controle, bancos de coeficientes e testbenches de fluxo. Por fim, o projeto é organizado para futura síntese lógica e implementação física com OpenLane e SKY130 \cite{openlane_project,skywater_sky130_pdk}.
+
+A Fig.~\ref{fig:diagrama_dpd} apresenta o diagrama funcional preliminar da arquitetura. O sistema foi estruturado em dois caminhos. O caminho rápido contém o núcleo GMP responsável pela inferência DPD em tempo real. O caminho lento contém captura de amostras, supervisão, treinamento, atualização de coeficientes e controle do estado do sistema. Essa separação foi adotada para evitar que o treinamento, que pode demandar janelas de tempo muito superiores ao período de amostragem, interfira no caminho de transmissão contínua.
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=1\linewidth]{Figures/DPDv1.drawio.png}
+    \caption{Diagrama funcional preliminar da arquitetura DPD proposta.}
+    \label{fig:diagrama_dpd}
+\end{figure}
+
+Durante a inicialização, o transmissor opera em bypass. Esse comportamento é necessário porque ainda não há coeficientes treinados para compensar o PA. Nesse período, as amostras de referência e feedback são capturadas e sincronizadas para que o caminho lento estime o comportamento do amplificador. Após o treinamento, os coeficientes são gravados em um dos bancos disponíveis, e a troca para o banco ativo ocorre apenas em evento de sincronismo. Essa estratégia evita que uma atualização de coeficientes ocorra no meio de um símbolo ou quadro, reduzindo o risco de descontinuidade no sinal transmitido.
+
+\section{Modelo GMP e Validação em OpenDPD}
+O modelo de referência adotado nesta etapa é um Generalized Memory Polynomial (GMP). A escolha do GMP foi deliberada: embora arquiteturas neurais possam alcançar desempenho superior em alguns cenários de RF wideband, modelos polinomiais generalizados continuam sendo uma referência importante por sua interpretabilidade, relação direta com operações MAC e viabilidade de implementação em hardware dedicado. Além disso, trabalhos recentes em OpenDPD mostram que a redução de complexidade, a quantização e a organização do modelo são aspectos centrais para tornar DPD viável em hardware de baixo consumo \cite{wu_mpdpd_2024,wu_opendpdv2_2025}.
+
+O modelo utilizado possui memória igual a 3, grau não linear até 5 e 39 termos efetivos. No arquivo treinado pelo OpenDPD, os coeficientes exportados são reais, porém a arquitetura RTL já foi preparada para coeficientes complexos. O banco de coeficientes usa o mapeamento:
+
+\begin{equation}
+    \texttt{addr}(2k) = \Re\{c_k\}, \quad
+    \texttt{addr}(2k+1) = \Im\{c_k\},
+\end{equation}
+
+em que \(c_k\) representa o coeficiente complexo do termo \(k\). Para o checkpoint atual, as entradas imaginárias são zero, mas a multiplicação complexa já está implementada no datapath. O banco possui 128 posições para acomodar os 78 words necessários ao modelo de 39 termos e manter margem para extensões futuras.
+
+O melhor caso preliminar obtido com o dataset ATSC 3.0/A322 apresentou os resultados da Tabela~\ref{tab:opendpd_resultados}. Os valores são extraídos diretamente do arquivo \texttt{DPD\_S\_0\_M\_GMP\_H\_15\_F\_64\_P\_39.csv}, gerado pelo OpenDPD.
+
+\begin{table}[!htb]
+    \centering
+    \caption{Resultados preliminares do DPD GMP no OpenDPD.}
+    \label{tab:opendpd_resultados}
+    \begin{tabular}{lccc}
+        \hline
+        Conjunto & NMSE (dB) & EVM (dB) & ACLR médio (dB) \\
+        \hline
+        Validação & -55.15 & -59.13 & -53.56 \\
+        Teste     & -57.47 & -61.00 & -46.45 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+A Fig.~\ref{fig:opendpd_metricas} apresenta as curvas de treinamento para NMSE, EVM e ACLR médio. Observa-se convergência rápida nas primeiras épocas, seguida por estabilização próxima à época 12. Esse comportamento foi usado como critério para selecionar o checkpoint exportado para RTL.
+
+\begin{figure*}[!htb]
+    \centering
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{opendpd_nmse_vs_epoch.png}
+        \caption{NMSE por época.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{opendpd_evm_vs_epoch.png}
+        \caption{EVM por época.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{opendpd_aclr_avg_vs_epoch.png}
+        \caption{ACLR médio por época.}
+    \end{subfigure}
+    \caption{Curvas de métricas do melhor caso preliminar avaliado no OpenDPD para o dataset ATSC 3.0/A322 8K 256-QAM em 24 MS/s.}
+    \label{fig:opendpd_metricas}
+\end{figure*}
+
+\section{Arquitetura RTL e SoC de Validação}
+A arquitetura RTL atual está organizada ao redor de um SoC mínimo. O processador PicoRV32 é utilizado como controlador de política e sequência de operação, não como elemento de processamento intensivo \cite{picorv32}. Essa decisão mantém flexibilidade para configurar registradores, iniciar captura, solicitar treinamento, supervisionar interrupções e comandar troca de bancos de coeficientes. O processamento de amostras permanece em lógica dedicada.
+
+O periférico DPD é composto pelos seguintes blocos principais:
+
+\begin{itemize}
+    \item \texttt{axi\_lite\_regs}: interface de controle e status acessível pelo PicoRV32;
+    \item \texttt{coef\_bank\_a} e \texttt{coef\_bank\_b}: bancos duplos para atualização segura de coeficientes;
+    \item \texttt{coef\_switch\_ctrl}: controlador de troca sincronizada de banco;
+    \item \texttt{dpd\_filter}: wrapper do caminho rápido, com bypass sincronizado e núcleo GMP;
+    \item \texttt{gmp\_engine}: motor de inferência DPD pipelineado;
+    \item \texttt{capture\_ram\_pingpong}: memória de captura para janelas de referência e feedback;
+    \item \texttt{mac\_engine}: bloco reservado ao treinamento lento e escrita de coeficientes;
+    \item \texttt{metric\_engine}: bloco de métricas em tempo de execução;
+    \item \texttt{irq\_status\_ctrl}: agregação de eventos, interrupções e solicitação de retreinamento.
+\end{itemize}
+
+O \texttt{gmp\_engine} implementado nesta etapa é compatível com o modelo OpenDPD de 39 termos. Para reduzir pressão de temporização em SKY130, o núcleo foi dividido em estágios de pipeline. O primeiro estágio monta a janela de amostras, o segundo calcula magnitudes, e os estágios seguintes acumulam grupos de termos do GMP. Com o pipeline cheio e os coeficientes previamente carregados para cache interno, o bloco aceita uma amostra por ciclo. Assim, para uma taxa de 24 MS/s, o objetivo mínimo é fechar temporização acima de 24 MHz. Frequências superiores são desejáveis para margem de integração, mas ainda dependem de síntese e análise física.
+
+O \texttt{metric\_engine} foi atualizado para observar tanto o feedback alinhado quanto a saída do GMP. Atualmente são extraídas métricas leves, adequadas a hardware: magnitude L1 da saída DPD, erro L1 entre referência e feedback, contagem de clipping e diferença de magnitude entre saída DPD e referência. Essas métricas não substituem EVM ou ACLR calculados em software, mas fornecem sinais de supervisão para disparo de retreinamento e diagnóstico em tempo de execução.
+
+\section{Datasets, Quantização e Contrato de Validação}
+O contrato de dados entre OpenDPD e RTL foi consolidado por meio de arquivos \texttt{.hex}. A entrada do GMP é armazenada em \texttt{gmp\_opendpd\_full\_samples\_iq\_q15.hex}, com 64 amostras úteis e duas amostras nulas foram adicionadas ao final do vetor de entrada para esvaziar o pipeline e preservar o alinhamento das saídas associadas aos termos com lookahead do modelo GMP. A saída esperada é armazenada em \texttt{gmp\_opendpd\_full\_expected\_iq\_q15.hex}. O banco de coeficientes é exportado como \texttt{coef\_bank\_openDPD.hex}, contendo 128 palavras signed de 18 bits.
+
+A validação bit-a-bit é essencial nesta etapa. Os vetores de referência gerados em Python foram alinhados ao comportamento inteiro do RTL, incluindo raiz quadrada inteira para cálculo de magnitude e saturação final para 16 bits. Dessa forma, diferenças entre OpenDPD e RTL podem ser atribuídas ao contrato de quantização e não a ambiguidades de modelo. O testbench \texttt{tb\_gmp\_engine\_opendpd.sv} carrega os coeficientes, aplica o dataset, verifica 64 saídas úteis e confirma que o núcleo GMP produz os mesmos valores esperados no modelo inteiro.
+
+Um segundo testbench, \texttt{tb\_metric\_engine.sv}, integra o \texttt{gmp\_engine} ao \texttt{metric\_engine}. Nesse fluxo, os pesos e amostras do OpenDPD são carregados, a saída do GMP é validada contra o vetores de referência e as métricas são impressas no transcript. O testbench permite alternar \texttt{+DPD\_ENABLE=0} ou \texttt{+DPD\_ENABLE=1}. No primeiro caso, as métricas enxergam a saída igual à referência, resultando em erro e drift próximos de zero no modo \texttt{loopback}. No segundo caso, as métricas enxergam a saída real do GMP, permitindo observar a diferença de magnitude introduzida pela predistorção.
+
+\section{Validação HDL}
+As simulações HDL foram executadas no Questa. Os blocos principais compilam sem erros e sem warnings. Os testbenches mais recentes cobrem:
+
+\begin{itemize}
+    \item carregamento do banco de coeficientes OpenDPD;
+    \item inferência GMP completa de 39 termos;
+    \item coeficientes complexos no formato real/imaginário;
+    \item operação streaming com uma amostra por ciclo;
+    \item validação bit-a-bit contra vetores de referência Q1.15;
+    \item extração de métricas a partir da saída real do GMP;
+    \item comparação entre métrica em bypass e métrica com DPD ativo;
+    \item compilação do HDL completo por meio de \texttt{rtl\_v2/filelist.f}.
+\end{itemize}
+
+O fluxo de validação mais importante nesta etapa pode ser resumido como:
+
+\begin{center}
+\texttt{dataset OpenDPD -> coeficientes Q2.16 -> GMP HDL -> vetores de referência Q1.15 -> métricas HDL}
+\end{center}
+
+A complexidade do modelo e dos dados foram aumentando gradativamente e validado etapa por etapa
+Esse resultado é relevante porque reduz o risco de divergência entre o algoritmo validado no OpenDPD e a implementação em hardware. Ainda assim, a validação atual não inclui um modelo físico completo de PA dentro do testbench HDL. No modo atual, o \texttt{FB\_MODE=loopback} é apenas um modelo de bancada para observar as métricas. A próxima evolução deve alimentar o caminho de feedback com um modelo de PA, ou com dados medidos, para que o \texttt{metric\_engine} avalie o erro entre a referência e saída real do transmissor.
+
+\section{Preparação para Implementação VLSI}
+A implementação foi organizada para a futura síntese em SKY130. A escolha por um GMP pipelineado reflete a restrição de temporização esperada em uma tecnologia de 130 nm. Embora a taxa de 24 MS/s pareça moderada em termos absolutos, o núcleo DPD executa múltiplas multiplicações, cálculo de magnitude, potências de amplitude, multiplicação complexa e acumulação de 39 termos. Por isso, uma implementação puramente combinacional tenderia a pressionar o caminho crítico e dificultar o fechamento de temporização.
+
+O papel do PicoRV32 permanece restrito à supervisão/debug e às possíveis configurações do dispositivo. O treinamento pesado não deve ser executado pelo processador. A arquitetura prevê que o \texttt{mac\_engine} seja a unidade dedicada de treinamento operando sobre janelas de captura, enquanto o \texttt{gmp\_engine} permanece responsável apenas pela inferência em tempo real. Essa separação é coerente com o requisito de manter o caminho critico determinístico com throughput estável.
+
+\section{Conclusão}
+x
+
+x
+
+x
+
+x
+
+x
+
+x
+
+x
+
+x
+
+x
+
+x
+
+\bibliographystyle{IEEEtran}
+\bibliography{References_clean}
+
+\end{document}

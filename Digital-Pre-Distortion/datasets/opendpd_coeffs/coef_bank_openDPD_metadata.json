@@ -1,0 +1,290 @@
+{
+  "source_pt": "/home/Ausilon/projeto_dpd/OpenDPD/save/ATSC3_A322_VV031_8K_256QAM_FS24M_AGGRESSIVE_ALIGNED/train_dpd/PA_S_0_M_GMP_H_23_F_64/DPD_S_0_M_GMP_H_15_F_64_P_39.pt",
+  "source_weight_count": 39,
+  "rtl_model": "OpenDPD GMP, memory_length=3, degree=5, 39 terms",
+  "coefficient_format": "complex coefficient as real/imag signed Q2.16 int18 in adjacent addresses",
+  "lookahead_samples": 2,
+  "note": "Checkpoint weights are real, so imaginary coefficient entries are zero.",
+  "coef_hex": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/coef_bank_openDPD.hex",
+  "audit_csv": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/coef_bank_openDPD_audit.csv",
+  "samples_hex": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/gmp_opendpd_samples_iq_q15.hex",
+  "expected_hex": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/gmp_opendpd_expected_iq_q15.hex",
+  "full_directed_samples": 64,
+  "full_samples_hex": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/gmp_opendpd_full_samples_iq_q15.hex",
+  "full_expected_hex": "/home/Ausilon/Desktop/dpd_v1/dpd_soc_min/datasets/opendpd_coeffs/gmp_opendpd_full_expected_iq_q15.hex",
+  "term_map": [
+    {
+      "term": "linear x_window[0]",
+      "kind": "linear",
+      "power": 0,
+      "amp_window": -1,
+      "x_window": 0
+    },
+    {
+      "term": "linear x_window[1]",
+      "kind": "linear",
+      "power": 0,
+      "amp_window": -1,
+      "x_window": 1
+    },
+    {
+      "term": "linear x_window[2]",
+      "kind": "linear",
+      "power": 0,
+      "amp_window": -1,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[0+0]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 0,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[0+1]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 0,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[0+2]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 0,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[1+0]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 1,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[1+1]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 1,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[1+2]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 1,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[2+0]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 2,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[2+1]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 2,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[2+2]^1",
+      "kind": "nonlinear",
+      "power": 1,
+      "amp_window": 2,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[0+0]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 0,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[0+1]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 0,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[0+2]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 0,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[1+0]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 1,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[1+1]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 1,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[1+2]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 1,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[2+0]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 2,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[2+1]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 2,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[2+2]^2",
+      "kind": "nonlinear",
+      "power": 2,
+      "amp_window": 2,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[0+0]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 0,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[0+1]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 0,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[0+2]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 0,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[1+0]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 1,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[1+1]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 1,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[1+2]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 1,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[2+0]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 2,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[2+1]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 2,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[2+2]^3",
+      "kind": "nonlinear",
+      "power": 3,
+      "amp_window": 2,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[0+0]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 0,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[0+1]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 0,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[0+2]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 0,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[1+0]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 1,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[1+1]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 1,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[1+2]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 1,
+      "x_window": 2
+    },
+    {
+      "term": "x_window[0] * abs_window[2+0]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 2,
+      "x_window": 0
+    },
+    {
+      "term": "x_window[1] * abs_window[2+1]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 2,
+      "x_window": 1
+    },
+    {
+      "term": "x_window[2] * abs_window[2+2]^4",
+      "kind": "nonlinear",
+      "power": 4,
+      "amp_window": 2,
+      "x_window": 2
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+    "DESIGN_NAME": "coef_bank_macro",
+    "VERILOG_FILES": "dir::src/*.v",
+    "CLOCK_PORT": "clk",
+    "CLOCK_NET": "ref::$CLOCK_PORT",
+    "CLOCK_PERIOD": 10,
+    "FP_PIN_ORDER_CFG": "dir::pin_order.cfg",
+    "FP_SIZING": "absolute",
+    "DIE_AREA": "0 0 1300 650",
+    "CORE_AREA": "40 40 1260 610",
+    "MACRO_PLACEMENT_CFG": "dir::macro_placement.cfg",
+    "EXTRA_LEFS": "/pdkroot/sky130A/libs.ref/sky130_sram_macros/lef/sky130_sram_1kbyte_1rw1r_32x256_8.lef",
+    "EXTRA_GDS_FILES": "/pdkroot/sky130A/libs.ref/sky130_sram_macros/gds/sky130_sram_1kbyte_1rw1r_32x256_8.gds",
+    "EXTRA_LIBS": "/pdkroot/sky130A/libs.ref/sky130_sram_macros/lib/sky130_sram_1kbyte_1rw1r_32x256_8_TT_1p8V_25C.lib",
+    "FP_PDN_ENABLE_MACROS_GRID": true,
+    "FP_PDN_SKIPTRIM": true,
+    "RUN_MAGIC_DRC": false,
+    "RUN_LVS": false,
+    "RUN_KLAYOUT_DRC": false,
+    "SYNTH_NO_FLAT": false,
+    "MAX_FANOUT_CONSTRAINT": 8,
+    "pdk::sky130*": {
+        "FP_CORE_UTIL": 18,
+        "PL_TARGET_DENSITY": 0.30,
+        "FP_PDN_VOFFSET": 15,
+        "FP_PDN_HOFFSET": 15,
+        "PL_MACRO_HALO": "20 20",
+        "PL_MACRO_CHANNEL": "30 30",
+        "scl::sky130_fd_sc_hd": {
+            "CLOCK_PERIOD": 10
+        }
+    }
+}
