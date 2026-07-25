@@ -204,6 +204,37 @@ treinamento quando as métricas ultrapassam os limiares configurados. O PicoRV32
 permanece como elemento de controle e política, sem executar processamento
 pesado de DSP.
 
+O algoritmo de inferência é um GMP complexo. Para cada amostra central da janela
+I/Q, o `GMPengine` calcula termos de base do tipo:
+
+```text
+phi_k[n] = x[n - m_x(k)] . |x[n - m_a(k)]|^p(k)
+y[n]     = sum_k c_k . phi_k[n],  k = 0 ... 38
+```
+
+em que `x[n]` é a amostra complexa de referência, `c_k` é o coeficiente
+complexo treinado e `p(k)` define a ordem não linear do termo. No HDL atual,
+`x[n]` usa Q1.15, `c_k` usa Q2.16 e a saída é saturada novamente para Q1.15.
+
+O treinamento interno usa uma forma block-NLMS por termo. A partir da captura
+REF/FB, o `MACcore` monta a mesma base GMP e atualiza os coeficientes por:
+
+```text
+w_k <- w_k + mu . sum(e[n] . conj(phi_k[n])) /
+             (epsilon + sum(|phi_k[n]|^2))
+```
+
+O `MetricEngine` usa métricas leves em hardware, sem FFT, divisão ou conversão
+para dB. As principais são EWMA de magnitude L1 da saída DPD, EWMA do erro
+REF-FB, EWMA do drift entre DPD e referência e contagem de clipping:
+
+```text
+power  <- power  - power/256  + (|dpd_i| + |dpd_q|)
+error  <- error  - error/256  + (|ref_i - fb_i| + |ref_q - fb_q|)
+drift  <- drift  - drift/256  + abs((|dpd_i| + |dpd_q|) - (|ref_i| + |ref_q|))
+retrain_request = error > th_error or drift > th_drift or clipping > th_clip
+```
+
 ```text
 bypass inicial
 -> captura REF/FB
