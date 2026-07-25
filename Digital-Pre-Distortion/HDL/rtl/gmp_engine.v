@@ -1,7 +1,7 @@
 // ============================================================
 // gmp_engine.v - Pipelined OpenDPD-compatible GMP inference engine
 //
-// rtl_v2 full model:
+// Full HDL model:
 //   - 39 OpenDPD GMP terms for memory_length=3, degree=5
 //   - complex coefficients: real/imag signed Q2.16 in adjacent addresses
 //   - signed Q1.15 I/Q samples

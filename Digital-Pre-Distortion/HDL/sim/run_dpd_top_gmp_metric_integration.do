@@ -1,13 +1,13 @@
-if {![file exists simv2]} {
-    file mkdir simv2
+if {![file exists sim]} {
+    file mkdir sim
 }
 
-if {![file exists simv2/work/_info]} {
-    vlib simv2/work
+if {![file exists sim/work/_info]} {
+    vlib sim/work
 }
 
-vlog -sv -work simv2/work -f rtl_v2/filelist.f tb/tb_dpd_top_gmp_metric_integration.sv
-vsim -voptargs=+acc -lib simv2/work tb_dpd_top_gmp_metric_integration
+vlog -sv -work sim/work -f rtl/filelist.f tb/tb_dpd_top_gmp_metric_integration.sv
+vsim -voptargs=+acc -lib sim/work tb_dpd_top_gmp_metric_integration
 
 add wave -divider "DPD Top Control"
 add wave -radix binary sim:/tb_dpd_top_gmp_metric_integration/resetn

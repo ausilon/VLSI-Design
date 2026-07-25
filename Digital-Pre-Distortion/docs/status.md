@@ -1,49 +1,57 @@
-# Estado Técnico
+# Estado Técnico do Projeto
 
-## Classificação do Projeto
+O projeto já possui uma cadeia de validação completa o suficiente para discutir
+arquitetura, desempenho e custo físico dos blocos principais. A implementação
+HDL foi validada em simulação, os datasets foram padronizados e a preparação
+OpenLane forneceu estimativas de área e timing para os macros mais importantes.
 
-O projeto está no estágio de prova de conceito avançada. Ele já cobre uma cadeia
-ampla, desde datasets e treinamento até HDL e avaliação física preliminar, mas
-ainda não é um circuito integrado pronto para fabricação.
+---
 
-Essa classificação é importante para a apresentação: o valor técnico está em
-mostrar que a arquitetura é coerente, que os blocos críticos foram validados e
-que os gargalos físicos foram medidos. O trabalho ainda não afirma fechamento
-industrial completo de timing, padframe, LVS/STA final ou qualificação para
-foundry.
+# Etapas Concluídas
 
-Ferramentas usadas:
+O dataset ATSC 3.0/A/322 foi gerado com GNU Radio a partir do projeto
+`gr-atsc3`, usando o exemplo `vv031.grc` como base. O sinal foi exportado em
+banda-base complexa, reamostrado para 24 MS/s e convertido para os formatos
+OpenDPD e HDL.
 
-- GNU Radio, Python e OpenDPD para sinal, modelo e treinamento;
-- Questa Intel FPGA Edition para simulação HDL;
-- OpenLane/OpenROAD/Yosys/Magic/KLayout e SKY130 para avaliação física.
+O OpenDPD foi usado para modelar o PA, treinar o predistorter e gerar
+coeficientes GMP. Os coeficientes foram exportados para Q2.16 e usados na
+validação do `GMPengine`.
 
-## Validado
+No HDL, foram validados separadamente `GMPengine`, `MetricEngine` e `MACcore`.
+Depois disso, o `dpd_top` foi simulado em fluxo completo, incluindo bypass,
+captura, treinamento, escrita de coeficientes, troca de banco, ativação do DPD e
+pedido de retreinamento.
 
-- Geração de datasets OFDM/ATSC 3.0 para validação.
-- Treinamento OpenDPD para referência algorítmica.
-- Exportação de coeficientes Q2.16.
-- Validação do `GMPengine` contra vetores golden.
-- Validação do `MetricEngine`.
-- Validação do `MACcore` NLMS serializado.
-- Teste integrado de `dpd_top` com bypass, captura, treino, troca de banco e
-  retreinamento.
-- Macros menores OpenLane com DRC/LVS limpos.
-- Scaffold físico top-level com Magic DRC limpo.
+No OpenLane, os blocos menores chegaram a DRC/LVS limpos. RAM de captura e banco
+de coeficientes foram preparados com SRAM hard macros. O top-level físico foi
+montado como scaffold para estudar área e distribuição das macros.
 
-## Em Aberto
+---
 
-- Fechar margem do `GMPengine` para 24 Msps em modo DPD ativo.
-- Criar top funcional completamente conectado.
-- Definir padframe e contrato de IO/alimentação.
-- Fechar PDN, roteamento, antena, LVS e STA do chip completo.
-- Revisar documentação final do artigo.
+# Gargalo Atual
 
-## Gargalo Atual
+O principal ponto técnico em aberto é o fechamento de timing do `GMPengine`.
+Para reduzir área, a versão física atual executa uma amostra em quatro ciclos.
+Com essa arquitetura, 24 MS/s exige clock mínimo de 96 MHz. A rodada física
+preliminar indicou aproximadamente 90,9 MHz, portanto o bloco está próximo do
+alvo, mas ainda sem margem.
 
-O `GMPengine` OpenLane serializado usa 4 ciclos por amostra. O resultado físico
-preliminar ficou em aproximadamente 90,9 MHz, equivalente a 22,7 Msps. O alvo de
-24 Msps exige no mínimo 96 MHz.
+A estratégia em andamento é tentar uma rodada mais agressiva de síntese,
+placement, CTS e resizer com alvo de 9 ns. Se essa tentativa não fechar, a
+alternativa mais direta é reduzir o intervalo de iniciação do `GMPengine` para
+três ciclos por amostra, aceitando aumento moderado de área.
 
-Está em andamento uma tentativa de fechamento mais agressiva com alvo de 9 ns
-(111,1 MHz), sem alterar o HDL funcional nem o floorplan conceitual.
+---
+
+# Próximos Passos
+
+O próximo avanço técnico é concluir a tentativa de timing do `GMPengine` acima
+de 96 MHz. Em seguida, o top-level deve ser transformado de scaffold físico para
+chip funcional conectado, com padframe, IOs essenciais, PDN revisado, roteamento
+de sinais, LVS completo e STA de chip.
+
+Também é necessário revisar a documentação do artigo para refletir os números
+finais de timing e área. A seção de conclusão deve separar claramente o que foi
+validado em simulação, o que foi medido fisicamente em SKY130 e o que permanece
+como trabalho futuro.

@@ -1,4 +1,4 @@
-# OpenDPD Coefficients for rtl_v2 GMP Test
+# OpenDPD Coefficients for GMP HDL Test
 
 Generated with:
 
@@ -32,7 +32,7 @@ addr 2*k + 1 = Im{coef[k]} signed Q2.16 int18
 ```
 
 The checkpoint currently contains 39 real OpenDPD GMP weights, so the exported
-imaginary entries are zero. The rtl_v2 `gmp_engine` implements full complex
+imaginary entries are zero. The HDL `gmp_engine` implements full complex
 coefficient multiplication and can consume nonzero imaginary coefficients when
 the trainer/exporter produces them.
 
@@ -52,7 +52,7 @@ Full directed test command:
 
 ```bash
 /home/Ausilon/intelFPGA_standard/24.1std/questa_fse/linux_x86_64/vlib /tmp/dpd_gmp39_full_directed_stream_work
-/home/Ausilon/intelFPGA_standard/24.1std/questa_fse/linux_x86_64/vlog -sv -work /tmp/dpd_gmp39_full_directed_stream_work rtl_v2/gmp_engine.v tb/tb_gmp_engine_opendpd.sv
+/home/Ausilon/intelFPGA_standard/24.1std/questa_fse/linux_x86_64/vlog -sv -work /tmp/dpd_gmp39_full_directed_stream_work rtl/gmp_engine.v tb/tb_gmp_engine_opendpd.sv
 /home/Ausilon/intelFPGA_standard/24.1std/questa_fse/linux_x86_64/vsim -c -lib /tmp/dpd_gmp39_full_directed_stream_work tb_gmp_engine_opendpd -do "run -all; quit"
 ```
 

@@ -1,75 +1,128 @@
-# Digital Pre-Distortion Subproject
+# Digital Pre-Distortion para Transmissores de TV Digital
 
-Este diretório contém o fluxo técnico do DPD: dataset, modelo algorítmico,
-implementação HDL, verificação e preparação física em SKY130.
+Este diretório concentra o desenvolvimento do subsistema DPD. A organização foi
+pensada para deixar claro como o trabalho evolui da geração do sinal até a
+implementação física: primeiro é criado um sinal de excitação em banda-base,
+depois o comportamento do PA e do DPD é estudado em software, em seguida o
+algoritmo é convertido para uma arquitetura HDL e, por fim, os blocos são
+avaliados em um fluxo físico compatível com SKY130.
 
-## Escopo Como Prova de Conceito
+O objetivo técnico é implementar um predistorter digital capaz de operar sobre
+amostras I/Q de um transmissor OFDM. O cenário de estudo usa canal de 6 MHz e
+amostragem de 24 MS/s. O algoritmo de referência é um modelo GMP com 39 termos,
+coeficientes complexos em Q2.16 e amostras signed Q1.15.
 
-O trabalho busca consolidar uma cadeia completa de estudo, e não entregar ainda
-um circuito integrado final. A contribuição principal é conectar, em um mesmo
-fluxo experimental, a geração de sinal, o treinamento DPD, a quantização dos
-coeficientes, a validação HDL e a estimativa física em SKY130.
+---
 
-Por esse motivo, algumas decisões privilegiam rastreabilidade e reprodução:
+# Funcionamento do Sistema
 
-- datasets pequenos o suficiente para simulação de terceiros;
-- testbenches determinísticos em vez de dependência exclusiva de bancada RF;
-- coeficientes exportados do OpenDPD como referência;
-- separação entre HDL funcional final e variantes OpenLane de avaliação física;
-- documentação explícita dos pontos ainda não fechados para foundry.
+O sistema foi definido para operar em dois caminhos de dados. O caminho rápido
+processa as amostras que seguem para o transmissor. O caminho lento realiza
+captura, análise e treinamento. Essa divisão foi adotada porque o treinamento é
+computacionalmente mais pesado, mas não precisa ocorrer em tempo real amostra a
+amostra. Em uma implementação ASIC de baixo custo, separar inferência e
+treinamento reduz a pressão por área e por quantidade de multiplicadores.
 
-As ferramentas usadas são majoritariamente abertas ou disponíveis em contexto
-acadêmico/estudantil. Isso torna o fluxo mais acessível, mas também exige
-cuidado ao interpretar resultados físicos preliminares, principalmente timing,
-LVS de top-level e qualidade final de tapeout.
+Durante a inicialização, o DPD permanece em bypass. Nessa fase, o sistema ainda
+não possui coeficientes válidos para compensar o PA. As amostras de referência e
+feedback são então capturadas em uma RAM ping-pong. O `MACcore` lê essa captura
+e executa o treinamento NLMS sobre a mesma base GMP usada na inferência. Ao
+final do treinamento, os coeficientes são gravados no banco inativo. A troca de
+banco é feita apenas em `sync_event`, de forma sincronizada com o fluxo de
+amostras.
 
-## Fluxo de Sistema
+Quando o DPD está ativo, o `GMPengine` aplica os coeficientes ao sinal de
+referência e gera a versão pre-distorcida. O `MetricEngine` monitora a potência,
+o erro REF-FB, o drift entre DPD e referência e eventos de clipping. Essas
+métricas são expostas ao plano de controle e podem disparar novo treinamento.
+O PicoRV32 atua como controlador de política, habilitando capturas, verificando
+status e coordenando a sequência geral, sem executar as operações pesadas de
+DSP.
 
-O sistema inicia em bypass porque ainda não existe modelo treinado do
-amplificador de potência (PA). Durante esse período, as amostras de referência e
-feedback são capturadas e sincronizadas. O `MACcore` usa essa captura para
-atualizar os coeficientes do modelo DPD. Após o treinamento, o banco inativo de
-coeficientes é escrito e a troca de banco ocorre em evento síncrono.
+---
 
-Fluxo operacional:
+# Blocos do HDL
+
+| Bloco | Função no sistema |
+|---|---|
+| `PicoRV32` | controle, política de operação, leitura de status e disparos |
+| `AXI-Lite` | plano de registradores para controle e observabilidade |
+| `Capture RAM` | armazenamento temporário de pares REF/FB para treinamento |
+| `Coef Bank A/B` | bancos alternados de coeficientes complexos Q2.16 |
+| `GMPengine` | inferência do predistorter no caminho rápido |
+| `MACcore` | treinamento NLMS em background |
+| `MetricEngine` | cálculo de métricas para supervisão e retreinamento |
+
+---
+
+# Dataset e OpenDPD
+
+O sinal de validação principal foi gerado no GNU Radio a partir do módulo
+externo `gr-atsc3`, usando o exemplo `vv031.grc` como base. Esse exemplo fornece
+uma cadeia transmissora ATSC 3.0 com blocos como scrambler, BCH/LDPC,
+interleaver, mapper, geração de pilotos, bootstrap e prefixo cíclico. A cadeia
+foi adaptada para usar um arquivo `.ts` de entrada e salvar a saída como
+banda-base complexa.
+
+O arquivo de saída em float complexo foi convertido para três usos:
+
+1. dataset OpenDPD, usado para modelar o PA e treinar o DPD;
+2. dataset Q1.15 em `.hex`, usado pelos testbenches HDL;
+3. arquivos auxiliares de captura esperada, usados para validar RAM e alinhamento.
+
+A etapa OpenDPD treinou um PA e um predistorter GMP. Os coeficientes finais do
+predistorter foram exportados para Q2.16 e carregados nos testbenches do
+`GMPengine`. Dessa forma, o HDL não foi validado apenas com números artificiais:
+ele também foi comparado contra vetores derivados do modelo treinado em
+software.
+
+---
+
+# Validação HDL
+
+Os testbenches foram escritos em SystemVerilog e executados no Questa. A
+validação foi feita de forma incremental: primeiro blocos pequenos, depois
+`GMPengine`, `MetricEngine`, `MACcore` e, por último, o fluxo completo em
+`dpd_top`.
+
+O teste integrado exercita a sequência:
 
 ```text
-bypass inicial
--> captura REF/FB
--> treinamento NLMS no MACcore
--> escrita no banco de coeficientes inativo
--> troca sincronizada de banco
--> DPD ativo via GMPengine
--> MetricEngine monitora erro/drift/clipping
--> pedido de retreinamento quando necessário
+boot em bypass -> captura -> treino -> escrita de coeficientes
+-> troca de banco -> DPD ativo -> métricas -> retreinamento
 ```
 
-## Blocos Principais
+Essa validação garante coerência funcional entre o contrato de dataset, o plano
+de controle, a RAM de captura, os bancos de coeficientes e os blocos críticos de
+DSP.
 
-| Bloco | Função |
-|---|---|
-| `PicoRV32` | política de controle, registradores, status e disparos |
-| `AXI-Lite` | plano de controle e visibilidade de status |
-| `Capture RAM` | snapshot de REF/FB para treinamento |
-| `Coef Bank A/B` | bancos alternados de coeficientes complexos Q2.16 |
-| `GMPengine` | inferência em tempo real do predistorter |
-| `MACcore` | treinamento interno lento/background |
-| `MetricEngine` | métricas para monitoramento e retreinamento |
+---
 
-## Quantização
+# Avaliação Física
 
-| Sinal | Formato |
-|---|---|
-| Amostras I/Q | signed Q1.15, 16 bits |
-| Coeficientes | signed Q2.16, 18 bits |
-| Modelo GMP | 39 termos complexos |
-| Baseband alvo | 24 Msps para canal de 6 MHz |
+Para SKY130/OpenLane, o projeto foi reorganizado em blocos físicos. Os blocos
+menores (`MetricEngine`, PicoRV32, AXI-Lite e periféricos) foram avaliados como
+macros standard-cell. A RAM de captura e os bancos de coeficientes foram
+preparados com SRAM hard macro. Os dois blocos críticos, `GMPengine` e
+`MACcore`, receberam versões específicas de OpenLane para reduzir área e pressão
+de roteamento.
 
-## Estado de Validação
+O `GMPengine` continua sendo o gargalo principal. Ele preserva o modelo GMP de
+39 termos e coeficientes complexos, mas foi serializado em quatro fases para
+reduzir área. Essa decisão trouxe uma redução importante de células, mas tornou
+o throughput dependente de fechar clock acima de 96 MHz para sustentar 24 MS/s.
 
-O contrato algorítmico foi validado com datasets gerados por GNU Radio e
-treinamento OpenDPD. O HDL v2 foi validado em Questa com testbenches unitários e
-integração do `dpd_top`.
+O `MACcore`, por outro lado, é um bloco de treinamento em background. Mesmo
+serializado, ele mantém folga temporal grande em relação ao alvo de treinamento
+em minutos, porque opera sobre snapshots de RAM e não sobre cada amostra em
+tempo real.
 
-O próximo passo crítico é fechar margem física do `GMPengine` acima de 96 MHz ou
-reduzir o intervalo de iniciação para manter 24 Msps com folga.
+---
+
+# Estado Atual
+
+O sistema HDL está validado em simulação para o fluxo principal. O fluxo físico
+já produziu macros e uma montagem top-level preliminar para análise de área e
+floorplan. O trabalho ainda precisa fechar a margem temporal do `GMPengine`,
+definir padframe e completar a integração física funcional antes de ser
+considerado um chip final.

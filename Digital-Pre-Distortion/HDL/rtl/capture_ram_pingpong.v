@@ -2,7 +2,7 @@
 // capture_ram_pingpong.v - Ping-pong capture RAM for REF/FB pairs
 //
 // Captures aligned reference and feedback samples into a stable snapshot.
-// PicoRV32 does not read this RAM directly in rtl_v2. The read port is an
+// PicoRV32 does not read this RAM directly. The read port is an
 // internal datapath interface used by MACcore while snapshot_locked prevents
 // overwrite of the completed page.
 // ============================================================

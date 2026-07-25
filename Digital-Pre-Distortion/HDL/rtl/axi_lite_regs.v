@@ -30,7 +30,7 @@
 //   0x054 DELAY_CTRL    [7:0]=feedback_delay
 //   0x058 TRAIN_CTRL    [15:0]=train_sample_count
 //   0x05C MAC_ERROR_ACC
-//   0x060 reserved      capture RAM is internal-only in rtl_v2
+//   0x060 reserved      capture RAM is internal-only in this integration
 // ============================================================
 module axi_lite_regs #(
     parameter SAMPLE_WIDTH = 16,

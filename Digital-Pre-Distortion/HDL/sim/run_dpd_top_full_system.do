@@ -1,13 +1,13 @@
-if {![file exists simv2]} {
-    file mkdir simv2
+if {![file exists sim]} {
+    file mkdir sim
 }
 
-if {![file exists simv2/work/_info]} {
-    vlib simv2/work
+if {![file exists sim/work/_info]} {
+    vlib sim/work
 }
 
-vlog -sv -work simv2/work -f rtl_v2/filelist.f tb/tb_dpd_top_full_system.sv
-vsim -voptargs=+acc -lib simv2/work tb_dpd_top_full_system
+vlog -sv -work sim/work -f rtl/filelist.f tb/tb_dpd_top_full_system.sv
+vsim -voptargs=+acc -lib sim/work tb_dpd_top_full_system
 
 add wave -divider "System Control"
 add wave -radix binary sim:/tb_dpd_top_full_system/resetn
