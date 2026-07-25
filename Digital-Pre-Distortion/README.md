@@ -76,6 +76,12 @@ predistorter foram exportados para Q2.16 e carregados nos testbenches do
 ele também foi comparado contra vetores derivados do modelo treinado em
 software.
 
+Os estudos algorítmicos completos estão documentados em
+[opendpd/README.md](opendpd/README.md). Essa documentação registra o uso do
+OpenDPD como referência para escolha do modelo GMP, interpretação das métricas
+NMSE/EVM/ACLR, exportação dos coeficientes e definição dos contratos de
+quantização adotados no HDL.
+
 ---
 
 # Validação HDL
