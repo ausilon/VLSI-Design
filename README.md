@@ -278,7 +278,7 @@ datapath e controle e deixa espaço para uma futura etapa de padframe.
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.png" width="420"><br>
+      <img src="Digital-Pre-Distortion/docs/figures/dpd_foorplan.png" width="420"><br>
       <sub>Floorplan manual preliminar (<a href="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.pdf">PDF</a>).</sub>
     </td>
     <td align="center" width="50%">
