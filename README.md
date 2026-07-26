@@ -281,8 +281,8 @@ datapath e controle e deixa espaço para uma futura etapa de padframe.
       <img src="Digital-Pre-Distortion/docs/figures/dpd_foorplan.png" width="420"><br>
       <sub>Floorplan manual preliminar (<a href="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.pdf">PDF</a>).</sub>
     </td>
-    <td align="center" width="50%">
-      <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_tapeout_top_full05_macro_labeled.png" width="320"><br>
+    <td align="center" width="40%">
+      <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_tapeout_top_full05_macro_labeled.png" width="420"><br>
       <sub>Floorplan macro-level gerado no OpenLane.</sub>
     </td>
   </tr>
