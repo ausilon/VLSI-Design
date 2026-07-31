@@ -113,10 +113,10 @@ preparados com SRAM hard macro. Os dois blocos críticos, `GMPengine` e
 `MACcore`, receberam versões específicas de OpenLane para reduzir área e pressão
 de roteamento.
 
-O `GMPengine` continua sendo o gargalo principal. Ele preserva o modelo GMP de
-39 termos e coeficientes complexos, mas foi serializado em quatro fases para
-reduzir área. Essa decisão trouxe uma redução importante de células, mas tornou
-o throughput dependente de fechar clock acima de 96 MHz para sustentar 24 MS/s.
+O `GMPengine` preserva o modelo GMP de 39 termos e coeficientes complexos e foi
+serializado em quatro fases para reduzir área. A implementação física atual usa
+dez lanes pipelineadas com latência fixa. Em 100 MHz, o intervalo de iniciação
+de quatro ciclos fornece 25 MS/s e atende o contrato de 24 MS/s.
 
 O `MACcore`, por outro lado, é um bloco de treinamento em background. Mesmo
 serializado, ele mantém folga temporal grande em relação ao alvo de treinamento
@@ -127,8 +127,10 @@ tempo real.
 
 # Estado Atual
 
-O sistema HDL está validado em simulação para o fluxo principal. O fluxo físico
-já produziu macros e uma montagem top-level preliminar para análise de área e
-floorplan. O trabalho ainda precisa fechar a margem temporal do `GMPengine`,
-definir padframe e completar a integração física funcional antes de ser
-considerado um chip final.
+O sistema HDL está validado em simulação para o fluxo principal. Capture RAM e
+Coef Bank fecharam 100 MHz em STA pós-route multicorner. GMPengine e MACcore
+possuem resultados positivos em STA pós-global-route, mas ainda requerem STA
+RCX final. O top funcional conectado, sua PDN e o pinout de 128 terminais já
+estão definidos; o próximo passo é concluir o MACcore atualizado, executar o
+top com views coerentes e implementar o padframe físico antes de considerar o
+circuito um chip final.

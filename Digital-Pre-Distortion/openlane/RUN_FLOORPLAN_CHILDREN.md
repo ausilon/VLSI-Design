@@ -40,6 +40,8 @@ CHILD_DESIGN=dpd_coef_bank_macro_100m CHILD_TAG=macro_route_100m_01 \
   ./flow.tcl -interactive -file ./designs/run_child_macro_route.tcl
 ```
 
-Nesse caso, Magic DRC/LVS interno das SRAMs fica desabilitado; o wrapper e o
-roteamento ao redor sao gerados, e as SRAMs sao tratadas como macros fisicos
-pre-validados.
+Esse comando registra apenas o fluxo inicial. As versões finais das memórias
+usam os runs `capture_ram_signoff_100m_13` e `coef_bank_signoff_100m_04`, com
+STA RCX multicorner, detailed-route DRC, LVS e XOR ativos. O Magic hierárquico
+ainda reporta regras internas das células OpenRAM fornecidas; essa ressalva não
+deve ser ocultada desabilitando os checks do wrapper.

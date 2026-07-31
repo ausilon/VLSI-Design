@@ -41,7 +41,7 @@ module coef_bank_macro #(
 
     sky130_sram_1kbyte_1rw1r_32x256_8 u_coef_bank_a (
         .clk0(clk),
-        .csb0(!wr_a),
+        .csb0(1'b0),
         .web0(!wr_a),
         .wmask0(4'h7),
         .addr0({1'b0, wr_addr_a}),
@@ -55,7 +55,7 @@ module coef_bank_macro #(
 
     sky130_sram_1kbyte_1rw1r_32x256_8 u_coef_bank_b (
         .clk0(clk),
-        .csb0(!wr_b),
+        .csb0(1'b0),
         .web0(!wr_b),
         .wmask0(4'h7),
         .addr0({1'b0, wr_addr_b}),

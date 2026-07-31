@@ -1,200 +1,109 @@
-# DPD SoC Tapeout Top Runbook
+# DPD SoC Top-Level Runbook
 
-This directory is the top-level tapeout candidate package for OpenLane.
+Este diretório reúne os arquivos de projeto do top hierárquico para OpenLane e
+SKY130. Os oito blocos abaixo entram como hard macros:
 
-## Scope
+- `gmp_engine_ol_wrapper`;
+- `mac_engine`;
+- `capture_ram_macro`;
+- `coef_bank_macro`;
+- `picorv32_ol_wrapper`;
+- `axi_ctrl_wrapper`;
+- `metric_engine`;
+- `peripherals_wrapper`.
 
-This run attempts top-level closure around the already hardened child macros:
+O top contém conectividade funcional. Ele não é apenas uma montagem visual de
+macros. FIFOs elásticas desacoplam fronteiras críticas, AXI-Lite permanece
+interno e o plano externo expõe os três barramentos I/Q, handshakes, flash SPI,
+UART, clock e reset.
 
-- `gmp_engine_ol_wrapper`
-- `mac_engine`
-- `picorv32_ol_wrapper`
-- `axi_ctrl_wrapper`
-- `metric_engine`
-- `peripherals_wrapper`
-- `capture_ram_macro`
-- `coef_bank_macro`
+## Pré-requisitos
 
-The first mandatory checkpoint is strict top-level PDN. If PDN fails, do not run
-full routing; adjust PDN pitch/offset/halos or macro placement first.
+Antes do top, devem existir as views coerentes de cada macro. Em particular:
 
-## Step 1 - PDN Check
+```text
+MACcore:      mac_core_100m_05
+Capture RAM:  capture_ram_signoff_100m_13
+Coef Bank:    coef_bank_signoff_100m_04
+```
+
+O script `prepare_corrected_macro_views.sh` valida a existência das views e
+instala os LEF/LIB atuais em `lef_top/` e `lib_top/`. Esses diretórios contêm
+artefatos gerados localmente e não são versionados.
+
+## Execução
 
 ```bash
 cd /home/Ausilon/openlane_work
-./designs/dpd_soc_tapeout_top_100m/scripts/run_pdn_check.sh tapeout_pdn_check_01
+
+./designs/dpd_soc_tapeout_top_100m/scripts/run_top_corrected_100m.sh \
+  top_v4_memfix_100m_01
 ```
 
-Monitor:
+Monitoramento:
 
 ```bash
-./designs/dpd_soc_tapeout_top_100m/scripts/monitor_tapeout.sh tapeout_pdn_check_01
+watch -n 30 \
+  '/home/Ausilon/openlane_work/designs/dpd_soc_tapeout_top_100m/scripts/monitor_tapeout.sh top_v4_memfix_100m_01'
 ```
 
-PDN pass criteria:
+O launcher recusa sobrescrever um run existente e interrompe antes do OpenLane
+se alguma view estiver ausente ou vazia.
 
-- flow reaches `save_state`;
-- no `PSM-0069`;
-- no top-level disconnected `VPWR/VGND` nodes.
+## Floorplan e PDN
 
-### PDN Attempt Notes
+O die de trabalho mede `8,5 x 8,5 mm`, com core entre `(600,600)` e
+`(7900,7900)` micrômetros. A distribuição aproxima Capture RAM e Coef Bank dos
+dois motores DSP e mantém PicoRV32, AXI-Lite e periféricos na ilha de controle.
 
-`tapeout_pdn_check_01` failed at `pdn.tcl` with:
+A PDN usa:
 
-```text
-PSM-0069 Check connectivity failed
-Unconnected PDN node on VPWR
-```
+- rails de células em met1;
+- straps verticais em met4;
+- straps horizontais em met5;
+- core ring em met4/met5;
+- grids de macro e conexões globais `VPWR/VGND` habilitados.
 
-The failing nodes appeared in the upper/right macro region around GMP. This
-points to disconnected top-level macro-grid fragments, not a failure of the
-already closed internal PDN inside the child macros.
+O check `check_macro_pg.tcl` exige que os terminais de alimentação das oito
+macros estejam conectados nominalmente a `VPWR` e `VGND`.
 
-Applied next-attempt changes:
+## Pinout planejado
 
-```json
-"FP_PDN_ENABLE_MACROS_GRID": false,
-"FP_PDN_VPITCH": 260,
-"FP_PDN_HPITCH": 260,
-"FP_PDN_VERTICAL_HALO": 60,
-"FP_PDN_HORIZONTAL_HALO": 60
-```
+O contrato lógico prevê 128 terminais:
 
-Recommended next tag:
+| Grupo | Terminais |
+|---|---:|
+| REF/FB/OUT I/Q | 96 |
+| Clock, reset e handshakes | 6 |
+| Flash SPI | 4 |
+| UART | 2 |
+| Reserva DFT | 4 |
+| Alimentação e terra | 16 |
+| **Total** | **128** |
 
-```bash
-./designs/dpd_soc_tapeout_top_100m/scripts/run_pdn_check.sh tapeout_pdn_check_02
-```
+O alvo provisório é `aQFN/DRQFN-128`, com exposed pad em `VSSD/GND`. O
+padframe físico, células ESD/clamp, corners, fillers e bonding diagram ainda
+dependem da seleção final do package outline.
 
-`tapeout_pdn_check_02` also failed with `PSM-0069`. The run configuration had
-`FP_PDN_ENABLE_MACROS_GRID=0`, but the OpenLane default `pdn_cfg.tcl` still
-instantiated a default macro PDN grid unconditionally:
+## Critérios de aprovação
 
-```text
-Inserting grid: macro - u_gmp
-Inserting grid: macro - u_mac
-...
-```
+`check_top_signoff.py` exige:
 
-The top-level PDN was then changed to use:
+- artefatos GDS, LEF, LIB, SDF e SPICE presentes;
+- setup e hold não negativos nos relatórios RCX disponíveis;
+- zero violações de slew e capacitância;
+- TritonRoute DRC vazio;
+- relatório de antena vazio;
+- LVS com `Total errors = 0`;
+- métricas finais sem DRC, antena, LVS ou KLayout pendentes.
 
-```text
-pdn_tapeout_cfg.tcl
-```
+Não são aceitos falsos paths globais, desativação de LVS/DRC ou relaxamento de
+clock para produzir aprovação artificial. Exceções temporais devem ser locais,
+documentadas e justificadas pelo contrato funcional.
 
-This custom PDN keeps the top grid explicit:
+## Limites atuais
 
-- `met1`: standard-cell rails;
-- `met4`: vertical top-level power straps;
-- `met5`: horizontal top-level power straps;
-- `met4/met5`: core ring;
-- no automatic top-level macro grid.
-
-`tapeout_pdn_check_03` passed the PDN checkpoint:
-
-```text
-All PDN stripes on net VPWR are connected.
-All PDN stripes on net VGND are connected.
-```
-
-Remaining warnings about `VSRC` are expected at this stage because the final
-padframe/power-source locations are not yet declared. They are not the previous
-connectivity failure, but must be closed before a real tapeout package.
-
-## Step 2 - Full Macro Top Signoff Attempt
-
-Run only after PDN check passes.
-
-```bash
-cd /home/Ausilon/openlane_work
-./designs/dpd_soc_tapeout_top_100m/scripts/run_full_tapeout.sh tapeout_full_01
-```
-
-Monitor:
-
-```bash
-./designs/dpd_soc_tapeout_top_100m/scripts/monitor_tapeout.sh tapeout_full_01
-```
-
-### Full Flow Attempt Notes
-
-`tapeout_full_02` reached CTS and then failed at routing resizer:
-
-```text
-RSZ-0005 Run global_route before estimating parasitics for global routing.
-Routed nets: 0
-```
-
-This is expected for the current macro-level scaffold because most functional
-inter-macro signal nets are still intentionally absent. The hard macros are
-placed and powered, but this is not yet the final connected production top.
-
-The full-flow script now skips:
-
-```text
-run_resizer_design_routing
-run_resizer_timing_routing
-```
-
-until the production top netlist is connected.
-
-To continue the existing `tapeout_full_02` run from CTS:
-
-```bash
-cd /home/Ausilon/openlane_work
-./designs/dpd_soc_tapeout_top_100m/scripts/continue_after_cts_no_resizer.sh tapeout_full_02
-```
-
-`tapeout_full_03` used the corrected macro-scaffold flow:
-
-- routing resizers disabled;
-- heuristic antenna repair disabled;
-- detailed routing disabled because global route produced zero signal guides;
-- Magic GDS/LEF/SPICE generated;
-- Magic DRC passed with no violations after GDS stream-out.
-
-Important result:
-
-```text
-No DRC violations after GDS streaming out.
-LVS total errors = 35
-```
-
-LVS does not close because the current top is still a physical macro scaffold,
-not the final connected production top. The report shows:
-
-```text
-net count difference = 16
-unmatched nets = 3
-unmatched devices = 16
-```
-
-Generated artifacts:
-
-```text
-results/signoff/dpd_soc_tapeout_top.gds
-results/signoff/dpd_soc_tapeout_top.klayout.gds
-results/signoff/dpd_soc_tapeout_top.lef
-results/signoff/dpd_soc_tapeout_top.spice
-```
-
-This GDS is useful for area/floorplan review and documentation, but is not a
-foundry-ready functional chip.
-
-## Important Limitations
-
-This package is a physical tapeout candidate scaffold. The current top still
-uses macro-level assembly and does not yet include a reviewed production
-padframe or all functional inter-macro signal connections. Treat successful
-OpenLane completion as physical-flow progress, not final tapeout authorization.
-
-Before real tapeout, complete:
-
-- production padframe;
-- final top-level Verilog connectivity;
-- top-level PDN signoff;
-- top-level signal routing;
-- DRC/LVS/CVC;
-- STA with realistic constraints;
-- antenna checks;
-- package/pinout review.
+Mesmo um run limpo deste core não constitui tapeout final. Permanecem
+obrigatórios o padframe real, caracterização Liberty multicorner das macros,
+IR drop, potência com atividade representativa, CVC/ERC, simulação gate-level
+com SDF e revisão do encapsulamento.

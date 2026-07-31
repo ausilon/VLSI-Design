@@ -256,17 +256,36 @@ SRAM. Essa separação evita que memórias grandes sejam implementadas
 integralmente em flip-flops e permite estudar a ocupação física de cada bloco.
 
 O `GMPengine` é o bloco de maior pressão de timing porque pertence ao caminho
-rápido. Na versão atual para OpenLane ele foi serializado em quatro fases,
-mantendo 39 termos GMP complexos, amostras Q1.15 e coeficientes Q2.16. Com essa
-arquitetura, o throughput em modo DPD ativo é `Fclk/4`. O resultado físico
-preliminar ficou próximo de 90,9 MHz, o que equivale a aproximadamente
-22,7 MS/s. Para atingir 24 MS/s com margem, o próximo fechamento físico precisa
-superar 96 MHz ou reduzir o intervalo de iniciação.
+rápido. A versão atual para OpenLane mantém os 39 termos GMP complexos,
+amostras Q1.15 e coeficientes Q2.16. Dez lanes processam quatro grupos de termos,
+resultando em intervalo de iniciação de quatro ciclos e throughput de
+`Fclk/4`. Cada lane possui contrato de latência fixa e pipeline separado para
+base GMP, produto, combinação complexa e alinhamento de saída. Em 100 MHz, essa
+arquitetura fornece exatamente 25 MS/s, acima do requisito de 24 MS/s.
 
-O top-level físico atual é uma montagem de macros usada para avaliar área,
-floorplan e integração preliminar. Ele ainda não deve ser tratado como tapeout
-final, pois falta fechar padframe, conectividade funcional completa, LVS/STA de
-chip completo e a estratégia definitiva de IO/alimentação.
+O `MACcore` usa a mesma base GMP no caminho lento e executa a atualização NLMS
+sobre snapshots da RAM. A serialização é mais intensa porque o treinamento não
+participa do datapath em tempo real. Após o registro da fronteira de leitura da
+Capture RAM, a FSM recebeu dois ciclos explícitos de espera antes de consumir
+cada palavra. O testbench golden foi repetido após essa alteração.
+
+As duas memórias foram refeitas para fechamento temporal real em 100 MHz. A
+Capture RAM registra entrada, saídas das SRAMs e mux final, enquanto atrasos
+físicos controlados corrigem os caminhos curtos de hold. O banco de
+coeficientes teve pin placement e CTS alinhados aos dois ports das SRAMs. Em
+ambos os casos a integração externa apresenta roteamento detalhado, LVS e XOR
+limpos. O Magic ainda sinaliza regras internas da implementação OpenRAM
+fornecida; essa limitação é registrada separadamente e não é convertida em um
+falso resultado de DRC zero.
+
+O top-level deixou de ser apenas um scaffold: o core atual contém conectividade
+funcional entre as oito macros, FIFOs elásticas nas fronteiras críticas, plano
+AXI-Lite interno, PDN hierárquica e 108 sinais funcionais externos. O die de
+trabalho está configurado em `8,5 x 8,5 mm`. O contrato de encapsulamento prevê
+`aQFN/DRQFN-128`, composto por 108 sinais funcionais, quatro sinais reservados
+para DFT e 16 terminais de alimentação. O exposed pad deve ser conectado a
+`VSSD/GND`. O padframe físico com células `sky130_fd_io`, a análise de IR drop e
+o signoff do top conectado ainda permanecem em aberto.
 
 O floorplan foi refinado a partir de uma proposta manual de organização de
 macros. A intenção foi manter o caminho rápido próximo ao `GMPengine`, posicionar
@@ -282,38 +301,30 @@ datapath e controle e deixa espaço para uma futura etapa de padframe.
       <sub>Floorplan manual preliminar (<a href="Digital-Pre-Distortion/docs/figures/dpdv1_foorplan.pdf">PDF</a>).</sub>
     </td>
     <td align="center" width="30%">
-      <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_tapeout_top_full05_macro_labeled.png" width="420"><br>
-      <sub>Floorplan macro-level gerado no OpenLane.</sub>
+      <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_top_floorplan_v4.png" width="420"><br>
+      <sub>Floorplan V4 adotado para o top conectado (<a href="Digital-Pre-Distortion/docs/figures/dpd_soc_top_floorplan_v4.pdf">PDF</a>).</sub>
     </td>
   </tr>
 </table>
 
-A tabela seguinte resume os resultados físicos usados como referência nesta
-etapa. Os blocos menores e as macros de memória chegaram a DRC/LVS limpos. O
-`GMPengine` e o `MACcore` também foram fechados como macros individuais. O
-`soc_top_scaffold` gerou GDS e passou DRC, mas o LVS ainda fica aberto porque o
-top atual é uma montagem física de macros, sem padframe e sem toda a
-conectividade funcional final.
+A tabela seguinte contém somente resultados auditados nos runs preservados. Os
+slacks de `GMPengine` e `MACcore` são pós-global-route e ainda não substituem o
+STA RCX multicorner. Nas memórias, os números são pós-roteamento com SPEF e
+múltiplos corners.
 
-| design_name | run | status | runtime | DIEAREA mm2 | cells | Cell/mm2 | WNS ns | AND | DFF | NAND | NOR | OR | XOR | XNOR | MUX | Fmax MHz | DRC | LVS |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| picorv32 | `signoff_100m_01` | signoff ok | 0h11m28s | 0.377 | 10114 | 26818.6 | n/a | 344 | 1704 | 498 | 269 | 459 | 34 | 75 | 2263 | 100.0 | 0 | 0 |
-| axi_ctrl | `signoff_100m_01` | signoff ok | 0h03m30s | 0.640 | 1713 | 2676.6 | n/a | 129 | 255 | 3 | 23 | 80 | 0 | 0 | 277 | 100.0 | 0 | 0 |
-| metric_engine | `signoff_100m_01` | signoff ok | 0h03m28s | 0.116 | 2593 | 22280.8 | n/a | 238 | 187 | 298 | 173 | 307 | 117 | 197 | 7 | 100.0 | 0 | 0 |
-| peripherals | `signoff_100m_01` | signoff ok | 0h01m15s | 0.044 | 755 | 17328.1 | n/a | 64 | 186 | 19 | 63 | 34 | 0 | 5 | 87 | 100.0 | 0 | 0 |
-| capture_ram | `macro_route_100m_01` | macro ok | 0h04m02s | 4.140 | 330 | 79.7 | n/a | 19 | 14 | 5 | 7 | 11 | 0 | 0 | 6 | 100.0 | 0 | 0 |
-| coef_bank | `macro_route_100m_01` | macro ok | 0h01m25s | 0.845 | 152 | 179.9 | n/a | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 50 | 100.0 | 0 | 0 |
-| gmp_engine | `signoff_100m_01` | signoff ok via continue | 12h42m04s | 12.206 | 328576 | 26919.2 | -92.630 | 38925 | 2509 | 48863 | 39185 | 41983 | 19584 | 36469 | 2595 | 90.9 | 0 | 0 |
-| mac_engine | `signoff_100m_no_prefill_01` | signoff ok | 2h11m45s | 3.987 | 91948 | 23062.2 | n/a | 5823 | 11329 | 6296 | 6840 | 7199 | 2487 | 5578 | 10968 | 100.0 | 0 | 0 |
-| soc_top_scaffold | `tapeout_full_05` | DRC ok, LVS aberto | 1h34m10s | 51.000 | 8 | 0.2 | 0.000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 90.9 | 0 | 35 |
+| bloco | run auditado | estágio temporal | área mm² | células | setup ns | hold ns | estado físico |
+|---|---|---|---:|---:|---:|---:|---|
+| GMPengine | run físico 100 MHz preservado | global-route STA | 11,498 | 223.170 | +3,16 | +0,09 | detailed route, Magic DRC e LVS limpos; RCX pendente |
+| MACcore | `mac_core_100m_05` | global-route STA | 7,659 | 131.048 | +1,47 | +0,16 | primeiro DRT terminou com um short em met1; continuação a partir do checkpoint em andamento |
+| Capture RAM | `capture_ram_signoff_100m_13` | RCX multicorner | 4,140 | 741 | +1,27 | +0,01 | TritonRoute DRC, LVS e XOR limpos; ressalva OpenRAM no Magic hierárquico |
+| Coef Bank | `coef_bank_signoff_100m_04` | RCX multicorner | 0,845 | 154 | +0,16 | +0,82 | TritonRoute DRC, LVS e XOR limpos; ressalva OpenRAM no Magic hierárquico |
+| Top conectado | próximo run `top_v4_memfix_100m_01` | ainda não executado | 72,250 propostos | n/a | n/a | n/a | aguarda MACcore atualizado e padframe físico |
 
-O campo `DIEAREA` dos blocos menores vem do LEF gerado para cada hard macro.
-Para `capture_ram`, `coef_bank` e `soc_top_scaffold`, a densidade de células não
-representa a ocupação lógica real, pois há macros de memória, obstruções e área
-reservada para integração física. O WNS do `gmp_engine` também deve ser tratado
-com cautela: o bloco passou por continuação manual após problemas de roteamento
-pesado, e a próxima etapa ainda é buscar margem acima de 96 MHz para sustentar
-24 MS/s com o intervalo de iniciação atual.
+PicoRV32, AXI-Lite, `MetricEngine` e periféricos possuem hard macros anteriores
+com DRC/LVS limpos, mas seus números antigos não são usados nesta tabela como
+prova de STA pós-route. Eles serão reavaliados no contexto do top conectado.
+Também não se declara Fmax a partir de WNS intermediário: a frequência de
+operação só será consolidada após STA extraído do bloco ou do chip completo.
 
 ---
 

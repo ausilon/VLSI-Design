@@ -78,3 +78,17 @@ if { $::env(FP_PDN_CORE_RING) == 1 } {
         -spacings "$::env(FP_PDN_CORE_RING_VSPACING) $::env(FP_PDN_CORE_RING_HSPACING)" \
         -core_offset "$::env(FP_PDN_CORE_RING_VOFFSET) $::env(FP_PDN_CORE_RING_HOFFSET)"
 }
+
+# Connect every hard macro's met4 VPWR/VGND pins to the top-level met4/met5
+# grid. Omitting this grid leaves two isolated supply nets per macro and makes
+# the extracted top fail LVS even when signal routing is correct.
+define_pdn_grid \
+    -macro \
+    -default \
+    -name macro_grid \
+    -starts_with POWER \
+    -halo "$::env(FP_PDN_HORIZONTAL_HALO) $::env(FP_PDN_VERTICAL_HALO)"
+
+add_pdn_connect \
+    -grid macro_grid \
+    -layers "$::env(FP_PDN_VERTICAL_LAYER) $::env(FP_PDN_HORIZONTAL_LAYER)"

@@ -25,11 +25,15 @@ module capture_ram_macro #(
 
     reg [ADDR_WIDTH-1:0] wr_addr;
     reg wr_page;
+    reg rd_upper_q;
+    reg sample_valid_q;
+    reg [WORD_WIDTH-1:0] packed_sample_q;
     wire wr_upper = wr_addr[ADDR_WIDTH-1];
-    wire rd_upper = rd_addr[ADDR_WIDTH-1];
+    wire rd_upper;
     wire [8:0] wr_addr9 = wr_addr[8:0];
     wire [8:0] rd_addr9 = rd_addr[8:0];
     wire [WORD_WIDTH-1:0] packed_sample = {ref_i, ref_q, fb_i, fb_q};
+    wire [WORD_WIDTH-1:0] packed_sample_delayed;
 
     wire [31:0] p0_l0_dout1;
     wire [31:0] p0_h0_dout1;
@@ -40,55 +44,104 @@ module capture_ram_macro #(
     wire [31:0] p1_l1_dout1;
     wire [31:0] p1_h1_dout1;
 
-    wire write_fire = busy && sample_valid;
+    reg [31:0] p0_l0_dout1_q;
+    reg [31:0] p0_h0_dout1_q;
+    reg [31:0] p0_l1_dout1_q;
+    reg [31:0] p0_h1_dout1_q;
+    reg [31:0] p1_l0_dout1_q;
+    reg [31:0] p1_h0_dout1_q;
+    reg [31:0] p1_l1_dout1_q;
+    reg [31:0] p1_h1_dout1_q;
+    reg [WORD_WIDTH-1:0] rd_data_q;
+    wire [WORD_WIDTH-1:0] rd_data_mux;
+
+    wire write_fire = busy && sample_valid_q;
     wire wr_p0 = write_fire && !wr_page;
     wire wr_p1 = write_fire && wr_page;
 
+    genvar input_bit;
+    generate
+        for (input_bit = 0; input_bit < WORD_WIDTH; input_bit = input_bit + 1) begin : gen_input_hold_delay
+`ifdef SYNTHESIS
+            sky130_fd_sc_hd__dlygate4sd3_1 u_input_delay (
+                .A(packed_sample[input_bit]),
+                .X(packed_sample_delayed[input_bit])
+            );
+`else
+            assign packed_sample_delayed[input_bit] = packed_sample[input_bit];
+`endif
+        end
+    endgenerate
+
+`ifdef SYNTHESIS
+    sky130_fd_sc_hd__dlygate4sd3_1 u_rd_upper_hold_delay (
+        .A(rd_addr[ADDR_WIDTH-1]),
+        .X(rd_upper)
+    );
+`else
+    assign rd_upper = rd_addr[ADDR_WIDTH-1];
+`endif
+
     assign capture_ready = !busy && !snapshot_lock;
-    assign rd_data = snapshot_page ?
-                     (rd_upper ? {p1_h1_dout1, p1_l1_dout1} : {p1_h0_dout1, p1_l0_dout1}) :
-                     (rd_upper ? {p0_h1_dout1, p0_l1_dout1} : {p0_h0_dout1, p0_l0_dout1});
+    // Register every SRAM read port before the page/half mux. The MAC read FSM
+    // already provides the cycle required by this synchronous boundary.
+    assign rd_data_mux = snapshot_page ?
+                         (rd_upper_q ? {p1_h1_dout1_q, p1_l1_dout1_q} : {p1_h0_dout1_q, p1_l0_dout1_q}) :
+                         (rd_upper_q ? {p0_h1_dout1_q, p0_l1_dout1_q} : {p0_h0_dout1_q, p0_l0_dout1_q});
+    assign rd_data = rd_data_q;
 
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page0_low0 (
         .clk0(clk), .csb0(!(wr_p0 && !wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[31:0]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[31:0]), .dout0(),
         .clk1(clk), .csb1(snapshot_page || rd_upper), .addr1(rd_addr9), .dout1(p0_l0_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page0_high0 (
         .clk0(clk), .csb0(!(wr_p0 && !wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[63:32]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[63:32]), .dout0(),
         .clk1(clk), .csb1(snapshot_page || rd_upper), .addr1(rd_addr9), .dout1(p0_h0_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page0_low1 (
         .clk0(clk), .csb0(!(wr_p0 && wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[31:0]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[31:0]), .dout0(),
         .clk1(clk), .csb1(snapshot_page || !rd_upper), .addr1(rd_addr9), .dout1(p0_l1_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page0_high1 (
         .clk0(clk), .csb0(!(wr_p0 && wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[63:32]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[63:32]), .dout0(),
         .clk1(clk), .csb1(snapshot_page || !rd_upper), .addr1(rd_addr9), .dout1(p0_h1_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page1_low0 (
         .clk0(clk), .csb0(!(wr_p1 && !wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[31:0]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[31:0]), .dout0(),
         .clk1(clk), .csb1(!snapshot_page || rd_upper), .addr1(rd_addr9), .dout1(p1_l0_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page1_high0 (
         .clk0(clk), .csb0(!(wr_p1 && !wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[63:32]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[63:32]), .dout0(),
         .clk1(clk), .csb1(!snapshot_page || rd_upper), .addr1(rd_addr9), .dout1(p1_h0_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page1_low1 (
         .clk0(clk), .csb0(!(wr_p1 && wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[31:0]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[31:0]), .dout0(),
         .clk1(clk), .csb1(!snapshot_page || !rd_upper), .addr1(rd_addr9), .dout1(p1_l1_dout1)
     );
     sky130_sram_2kbyte_1rw1r_32x512_8 u_page1_high1 (
         .clk0(clk), .csb0(!(wr_p1 && wr_upper)), .web0(1'b0), .wmask0(4'hf),
-        .addr0(wr_addr9), .din0(packed_sample[63:32]), .dout0(),
+        .addr0(wr_addr9), .din0(packed_sample_q[63:32]), .dout0(),
         .clk1(clk), .csb1(!snapshot_page || !rd_upper), .addr1(rd_addr9), .dout1(p1_h1_dout1)
     );
+
+    always @(posedge clk) begin
+        p0_l0_dout1_q <= p0_l0_dout1;
+        p0_h0_dout1_q <= p0_h0_dout1;
+        p0_l1_dout1_q <= p0_l1_dout1;
+        p0_h1_dout1_q <= p0_h1_dout1;
+        p1_l0_dout1_q <= p1_l0_dout1;
+        p1_h0_dout1_q <= p1_h0_dout1;
+        p1_l1_dout1_q <= p1_l1_dout1;
+        p1_h1_dout1_q <= p1_h1_dout1;
+        rd_data_q <= rd_data_mux;
+    end
 
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
@@ -97,14 +150,20 @@ module capture_ram_macro #(
             busy <= 1'b0;
             done <= 1'b0;
             snapshot_page <= 1'b0;
+            rd_upper_q <= 1'b0;
+            sample_valid_q <= 1'b0;
+            packed_sample_q <= {WORD_WIDTH{1'b0}};
         end else begin
+            rd_upper_q <= rd_upper;
+            sample_valid_q <= sample_valid;
+            packed_sample_q <= packed_sample_delayed;
             if (start && capture_ready) begin
                 busy <= 1'b1;
                 done <= 1'b0;
                 wr_addr <= {ADDR_WIDTH{1'b0}};
                 wr_page <= ~snapshot_page;
             end else if (write_fire) begin
-                if (wr_addr >= capture_len) begin
+                if (wr_addr == capture_len) begin
                     busy <= 1'b0;
                     done <= 1'b1;
                     snapshot_page <= wr_page;

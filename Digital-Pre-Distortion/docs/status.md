@@ -23,35 +23,45 @@ Depois disso, o `dpd_top` foi simulado em fluxo completo, incluindo bypass,
 captura, treinamento, escrita de coeficientes, troca de banco, ativação do DPD e
 pedido de retreinamento.
 
-No OpenLane, os blocos menores chegaram a DRC/LVS limpos. RAM de captura e banco
-de coeficientes foram preparados com SRAM hard macros. O top-level físico foi
-montado como scaffold para estudar área e distribuição das macros.
+No OpenLane, o `GMPengine` e o `MACcore` foram transformados em hard macros
+serializadas. RAM de captura e banco de coeficientes usam SRAM hard macros e
+foram refeitos para fechamento temporal em 100 MHz. O top-level atual já possui
+conectividade funcional, FIFOs de fronteira, PDN hierárquica e um contrato de
+pinout para 128 terminais.
 
 ---
 
 # Gargalo Atual
 
-O principal ponto técnico em aberto é o fechamento de timing do `GMPengine`.
-Para reduzir área, a versão física atual executa uma amostra em quatro ciclos.
-Com essa arquitetura, 24 MS/s exige clock mínimo de 96 MHz. A rodada física
-preliminar indicou aproximadamente 90,9 MHz, portanto o bloco está próximo do
-alvo, mas ainda sem margem.
+O gargalo imediato é concluir o hardening do `MACcore` atualizado e executar o
+top com todas as views coerentes. O candidato `mac_core_100m_05` apresenta em
+global-route setup de `+1,47 ns`, hold de `+0,16 ns`, 131.048 células e
+7,659 mm². O primeiro detailed routing terminou com um único short em met1; a
+continuação parte do checkpoint pós-global-route e não repete síntese,
+floorplan, placement ou CTS.
 
-A estratégia em andamento é tentar uma rodada mais agressiva de síntese,
-placement, CTS e resizer com alvo de 9 ns. Se essa tentativa não fechar, a
-alternativa mais direta é reduzir o intervalo de iniciação do `GMPengine` para
-três ciclos por amostra, aceitando aumento moderado de área.
+O `GMPengine` já opera com `II=4`, dez lanes e clock alvo de 100 MHz, atendendo
+25 MS/s. Seu resultado preservado apresenta setup de `+3,16 ns` e hold de
+`+0,09 ns` no global-route, além de DRC/LVS limpos. Ainda é necessário produzir
+STA RCX multicorner para consolidar o fechamento temporal do bloco.
+
+A Capture RAM fecha setup/hold em `+1,27/+0,01 ns`, e o Coef Bank em
+`+0,16/+0,82 ns`, ambos em STA pós-route multicorner. As margens são positivas,
+mas o hold da Capture RAM é estreito e deve ser acompanhado na integração.
 
 ---
 
 # Próximos Passos
 
-O próximo avanço técnico é concluir a tentativa de timing do `GMPengine` acima
-de 96 MHz. Em seguida, o top-level deve ser transformado de scaffold físico para
-chip funcional conectado, com padframe, IOs essenciais, PDN revisado, roteamento
-de sinais, LVS completo e STA de chip.
+1. concluir DRC/LVS do `mac_core_100m_05`;
+2. instalar no top os LEF/LIB/GDS atuais do MACcore, Capture RAM e Coef Bank;
+3. executar `top_v4_memfix_100m_01` com STA, DRC, antena, LVS e XOR estritos;
+4. implementar o padframe com `sky130_fd_io` para o contrato
+   `aQFN/DRQFN-128`;
+5. executar STA RCX multicorner, potência, IR drop, CVC/ERC e simulação
+   gate-level com SDF;
+6. atualizar artigo e tabela física somente com resultados auditados.
 
-Também é necessário revisar a documentação do artigo para refletir os números
-finais de timing e área. A seção de conclusão deve separar claramente o que foi
-validado em simulação, o que foi medido fisicamente em SKY130 e o que permanece
-como trabalho futuro.
+Até essas etapas terminarem, os números de global-route são apresentados como
+resultados físicos preliminares, e o top não é classificado como GDS pronto
+para foundry.

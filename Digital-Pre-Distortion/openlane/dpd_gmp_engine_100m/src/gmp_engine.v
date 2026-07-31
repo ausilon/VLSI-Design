@@ -1,21 +1,22 @@
 // ============================================================
-// gmp_engine.v - OpenLane area-oriented serial GMP engine
+// gmp_engine.v - OpenLane timing-oriented 39-term GMP engine
 //
-// OpenLane-only snapshot variant:
-//   - same external contract as rtl_v2 gmp_engine
-//   - same 39 OpenDPD GMP terms and complex Q2.16 coefficients
-//   - same signed Q1.15 I/Q samples and 2-sample lookahead
-//   - serializes the 39-term accumulation into 4 internal phases
-//   - computes only one new |x| magnitude per accepted sample
+// Contract:
+//   - Q1.15 signed I/Q samples
+//   - complex Q2.16 coefficients stored as:
+//       addr 2*k+0 = Re{coef[k]}
+//       addr 2*k+1 = Im{coef[k]}
+//   - 39 OpenDPD GMP terms
+//   - two-sample lookahead in the output sequence
 //
-// Throughput target:
-//   At 100 MHz, one accepted DPD sample every 4 cycles gives 25 Msps.
-//   This preserves margin above the 24 Msps baseband validation target while
-//   avoiding the large fully-parallel 39-term datapath.
-//
-// Coefficient bank map:
-//   addr 2*k+0 = Re{coef[k]}, signed Q2.16 int18
-//   addr 2*k+1 = Im{coef[k]}, signed Q2.16 int18
+// Architecture:
+//   - 10 pipelined MAC lanes
+//   - 4 issue phases per output sample, covering 40 slots
+//   - term slot 39 is forced to zero
+//   - II = 4 cycles in steady state
+//   - exact RTL magnitude is preserved; input magnitude/powers are computed by
+//     a fixed-latency feature pipeline before entering the GMP window
+//   - lane multiplication and complex accumulation are registered separately
 // ============================================================
 module gmp_engine #(
     parameter SAMPLE_WIDTH = 16,
@@ -40,18 +41,25 @@ module gmp_engine #(
     output wire busy
 );
     localparam N_TERMS = 39;
+    localparam [5:0] N_TERMS_SIZED = 6'd39;
     localparam N_COEF_WORDS = 2 * N_TERMS;
+    localparam LANES = 10;
+    localparam [5:0] LANES_SIZED = 6'd10;
+    localparam PHASE_LAST = 2'd3;
 
-    localparam STATE_LOAD = 3'd0;
-    localparam STATE_RUN  = 3'd1;
-    localparam STATE_G1   = 3'd2;
-    localparam STATE_G2   = 3'd3;
-    localparam STATE_G3   = 3'd4;
+    localparam STATE_LOAD   = 3'd0;
+    localparam STATE_RUN    = 3'd1;
+    localparam STATE_ISSUE1 = 3'd2;
+    localparam STATE_ISSUE2 = 3'd3;
+    localparam STATE_ISSUE3 = 3'd4;
 
     reg [2:0] state;
     reg coeff_loaded;
     reg [COEF_ADDR_WIDTH-1:0] load_addr;
     reg [2:0] valid_count;
+    reg active_slot;
+    reg next_slot;
+    reg [1:0] raw_cooldown;
 
     reg signed [COEF_WIDTH-1:0] coef_real [0:N_TERMS-1];
     reg signed [COEF_WIDTH-1:0] coef_imag [0:N_TERMS-1];
@@ -75,13 +83,50 @@ module gmp_engine #(
     reg [15:0] w_p20, w_p21, w_p22, w_p23, w_p24;
     reg [15:0] w_p30, w_p31, w_p32, w_p33, w_p34;
     reg [15:0] w_p40, w_p41, w_p42, w_p43, w_p44;
-    reg signed [47:0] acc_i, acc_q;
+
+    reg signed [47:0] acc_i [0:1];
+    reg signed [47:0] acc_q [0:1];
+
+    reg feat_s0_valid;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s0_i;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s0_q;
+
+    reg feat_s1_valid;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s1_i;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s1_q;
+    reg [31:0] feat_s1_mag2;
+
+    wire sqrt_valid;
+    wire [15:0] sqrt_mag;
+    reg signed [SAMPLE_WIDTH-1:0] sqrt_i_pipe [0:16];
+    reg signed [SAMPLE_WIDTH-1:0] sqrt_q_pipe [0:16];
+    reg sqrt_side_valid [0:16];
+
+    reg feat_s2_valid;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s2_i;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s2_q;
+    reg [15:0] feat_s2_m;
+    reg [15:0] feat_s2_p2;
+
+    reg feat_s3_valid;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s3_i;
+    reg signed [SAMPLE_WIDTH-1:0] feat_s3_q;
+    reg [15:0] feat_s3_m;
+    reg [15:0] feat_s3_p2;
+    reg [15:0] feat_s3_p3;
+
+    reg feat_valid;
+    reg signed [SAMPLE_WIDTH-1:0] feat_i;
+    reg signed [SAMPLE_WIDTH-1:0] feat_q;
+    reg [15:0] feat_m;
+    reg [15:0] feat_p2;
+    reg [15:0] feat_p3;
+    reg [15:0] feat_p4;
 
     wire can_accept_output = !out_valid || out_ready;
-    wire run_ready = (state == STATE_RUN) && coeff_loaded && can_accept_output;
-
-    assign in_ready = enable ? run_ready : can_accept_output;
-    assign busy = enable && ((state != STATE_RUN) || !coeff_loaded || !can_accept_output);
+    wire raw_ready = coeff_loaded && (raw_cooldown == 2'd0);
+    assign in_ready = enable ? raw_ready : can_accept_output;
+    assign busy = enable && (!coeff_loaded || (state != STATE_RUN) || !can_accept_output || (raw_cooldown != 2'd0));
 
     wire signed [SAMPLE_WIDTH-1:0] n_i0 = x_i1;
     wire signed [SAMPLE_WIDTH-1:0] n_q0 = x_q1;
@@ -91,73 +136,142 @@ module gmp_engine #(
     wire signed [SAMPLE_WIDTH-1:0] n_q2 = x_q3;
     wire signed [SAMPLE_WIDTH-1:0] n_i3 = x_i4;
     wire signed [SAMPLE_WIDTH-1:0] n_q3 = x_q4;
-    wire signed [SAMPLE_WIDTH-1:0] n_i4 = i_in;
-    wire signed [SAMPLE_WIDTH-1:0] n_q4 = q_in;
+    wire signed [SAMPLE_WIDTH-1:0] n_i4 = feat_i;
+    wire signed [SAMPLE_WIDTH-1:0] n_q4 = feat_q;
 
     wire [15:0] n_m0 = x_m1;
     wire [15:0] n_m1 = x_m2;
     wire [15:0] n_m2 = x_m3;
     wire [15:0] n_m3 = x_m4;
-    wire [15:0] n_m4 = mag_q15(i_in, q_in);
+    wire [15:0] n_m4 = feat_m;
 
     wire [15:0] n_p20 = x_p21;
     wire [15:0] n_p21 = x_p22;
     wire [15:0] n_p22 = x_p23;
     wire [15:0] n_p23 = x_p24;
-    wire [15:0] n_p24 = q15_umult(n_m4, n_m4);
+    wire [15:0] n_p24 = feat_p2;
     wire [15:0] n_p30 = x_p31;
     wire [15:0] n_p31 = x_p32;
     wire [15:0] n_p32 = x_p33;
     wire [15:0] n_p33 = x_p34;
-    wire [15:0] n_p34 = q15_umult(n_p24, n_m4);
+    wire [15:0] n_p34 = feat_p3;
     wire [15:0] n_p40 = x_p41;
     wire [15:0] n_p41 = x_p42;
     wire [15:0] n_p42 = x_p43;
     wire [15:0] n_p43 = x_p44;
-    wire [15:0] n_p44 = q15_umult(n_p34, n_m4);
+    wire [15:0] n_p44 = feat_p4;
 
-    wire accept_sample = in_valid && in_ready;
-    wire produce_window = enable && accept_sample && (valid_count >= 3'd2);
-    wire phase_uses_new_window = (state == STATE_RUN) && produce_window;
-    wire [1:0] phase_sel =
-        (state == STATE_G1) ? 2'd1 :
-        (state == STATE_G2) ? 2'd2 :
-        (state == STATE_G3) ? 2'd3 : 2'd0;
+    wire raw_accept = enable && in_valid && in_ready;
+    wire accept_sample = enable && feat_valid && (state == STATE_RUN) && coeff_loaded && can_accept_output;
+    wire produce_window = accept_sample && (valid_count >= 3'd2);
 
-    wire signed [SAMPLE_WIDTH-1:0] phase_i0 = phase_uses_new_window ? n_i0 : w_i0;
-    wire signed [SAMPLE_WIDTH-1:0] phase_q0 = phase_uses_new_window ? n_q0 : w_q0;
-    wire signed [SAMPLE_WIDTH-1:0] phase_i1 = phase_uses_new_window ? n_i1 : w_i1;
-    wire signed [SAMPLE_WIDTH-1:0] phase_q1 = phase_uses_new_window ? n_q1 : w_q1;
-    wire signed [SAMPLE_WIDTH-1:0] phase_i2 = phase_uses_new_window ? n_i2 : w_i2;
-    wire signed [SAMPLE_WIDTH-1:0] phase_q2 = phase_uses_new_window ? n_q2 : w_q2;
-    wire signed [SAMPLE_WIDTH-1:0] phase_i3 = phase_uses_new_window ? n_i3 : w_i3;
-    wire signed [SAMPLE_WIDTH-1:0] phase_q3 = phase_uses_new_window ? n_q3 : w_q3;
-    wire signed [SAMPLE_WIDTH-1:0] phase_i4 = phase_uses_new_window ? n_i4 : w_i4;
-    wire signed [SAMPLE_WIDTH-1:0] phase_q4 = phase_uses_new_window ? n_q4 : w_q4;
+    wire issue_phase0 = produce_window;
+    wire issue_phase1 = (state == STATE_ISSUE1);
+    wire issue_phase2 = (state == STATE_ISSUE2);
+    wire issue_phase3 = (state == STATE_ISSUE3);
+    wire issue_valid = issue_phase0 || issue_phase1 || issue_phase2 || issue_phase3;
+    wire [1:0] issue_phase =
+        issue_phase0 ? 2'd0 :
+        issue_phase1 ? 2'd1 :
+        issue_phase2 ? 2'd2 : 2'd3;
+    wire issue_slot = issue_phase0 ? next_slot : active_slot;
+    wire issue_uses_new = issue_phase0;
 
-    wire [15:0] phase_m0 = phase_uses_new_window ? n_m0 : w_m0;
-    wire [15:0] phase_m1 = phase_uses_new_window ? n_m1 : w_m1;
-    wire [15:0] phase_m2 = phase_uses_new_window ? n_m2 : w_m2;
-    wire [15:0] phase_m3 = phase_uses_new_window ? n_m3 : w_m3;
-    wire [15:0] phase_m4 = phase_uses_new_window ? n_m4 : w_m4;
-    wire [15:0] phase_p20 = phase_uses_new_window ? n_p20 : w_p20;
-    wire [15:0] phase_p21 = phase_uses_new_window ? n_p21 : w_p21;
-    wire [15:0] phase_p22 = phase_uses_new_window ? n_p22 : w_p22;
-    wire [15:0] phase_p23 = phase_uses_new_window ? n_p23 : w_p23;
-    wire [15:0] phase_p24 = phase_uses_new_window ? n_p24 : w_p24;
-    wire [15:0] phase_p30 = phase_uses_new_window ? n_p30 : w_p30;
-    wire [15:0] phase_p31 = phase_uses_new_window ? n_p31 : w_p31;
-    wire [15:0] phase_p32 = phase_uses_new_window ? n_p32 : w_p32;
-    wire [15:0] phase_p33 = phase_uses_new_window ? n_p33 : w_p33;
-    wire [15:0] phase_p34 = phase_uses_new_window ? n_p34 : w_p34;
-    wire [15:0] phase_p40 = phase_uses_new_window ? n_p40 : w_p40;
-    wire [15:0] phase_p41 = phase_uses_new_window ? n_p41 : w_p41;
-    wire [15:0] phase_p42 = phase_uses_new_window ? n_p42 : w_p42;
-    wire [15:0] phase_p43 = phase_uses_new_window ? n_p43 : w_p43;
-    wire [15:0] phase_p44 = phase_uses_new_window ? n_p44 : w_p44;
+    wire signed [SAMPLE_WIDTH-1:0] issue_i0 = issue_uses_new ? n_i0 : w_i0;
+    wire signed [SAMPLE_WIDTH-1:0] issue_q0 = issue_uses_new ? n_q0 : w_q0;
+    wire signed [SAMPLE_WIDTH-1:0] issue_i1 = issue_uses_new ? n_i1 : w_i1;
+    wire signed [SAMPLE_WIDTH-1:0] issue_q1 = issue_uses_new ? n_q1 : w_q1;
+    wire signed [SAMPLE_WIDTH-1:0] issue_i2 = issue_uses_new ? n_i2 : w_i2;
+    wire signed [SAMPLE_WIDTH-1:0] issue_q2 = issue_uses_new ? n_q2 : w_q2;
+    wire signed [SAMPLE_WIDTH-1:0] issue_i3 = issue_uses_new ? n_i3 : w_i3;
+    wire signed [SAMPLE_WIDTH-1:0] issue_q3 = issue_uses_new ? n_q3 : w_q3;
+    wire signed [SAMPLE_WIDTH-1:0] issue_i4 = issue_uses_new ? n_i4 : w_i4;
+    wire signed [SAMPLE_WIDTH-1:0] issue_q4 = issue_uses_new ? n_q4 : w_q4;
 
-    wire signed [47:0] phase_acc_i_w;
-    wire signed [47:0] phase_acc_q_w;
+    wire [15:0] issue_m0 = issue_uses_new ? n_m0 : w_m0;
+    wire [15:0] issue_m1 = issue_uses_new ? n_m1 : w_m1;
+    wire [15:0] issue_m2 = issue_uses_new ? n_m2 : w_m2;
+    wire [15:0] issue_m3 = issue_uses_new ? n_m3 : w_m3;
+    wire [15:0] issue_m4 = issue_uses_new ? n_m4 : w_m4;
+    wire [15:0] issue_p20 = issue_uses_new ? n_p20 : w_p20;
+    wire [15:0] issue_p21 = issue_uses_new ? n_p21 : w_p21;
+    wire [15:0] issue_p22 = issue_uses_new ? n_p22 : w_p22;
+    wire [15:0] issue_p23 = issue_uses_new ? n_p23 : w_p23;
+    wire [15:0] issue_p24 = issue_uses_new ? n_p24 : w_p24;
+    wire [15:0] issue_p30 = issue_uses_new ? n_p30 : w_p30;
+    wire [15:0] issue_p31 = issue_uses_new ? n_p31 : w_p31;
+    wire [15:0] issue_p32 = issue_uses_new ? n_p32 : w_p32;
+    wire [15:0] issue_p33 = issue_uses_new ? n_p33 : w_p33;
+    wire [15:0] issue_p34 = issue_uses_new ? n_p34 : w_p34;
+    wire [15:0] issue_p40 = issue_uses_new ? n_p40 : w_p40;
+    wire [15:0] issue_p41 = issue_uses_new ? n_p41 : w_p41;
+    wire [15:0] issue_p42 = issue_uses_new ? n_p42 : w_p42;
+    wire [15:0] issue_p43 = issue_uses_new ? n_p43 : w_p43;
+    wire [15:0] issue_p44 = issue_uses_new ? n_p44 : w_p44;
+
+    wire [LANES-1:0] lane_valid_o;
+    wire [LANES-1:0] lane_slot_o;
+    wire [2*LANES-1:0] lane_phase_o;
+    wire signed [47:0] lane_term_i [0:LANES-1];
+    wire signed [47:0] lane_term_q [0:LANES-1];
+
+    wire signed [47:0] lane_sum_i =
+        (((lane_term_i[0] + lane_term_i[1]) + (lane_term_i[2] + lane_term_i[3])) +
+         ((lane_term_i[4] + lane_term_i[5]) + (lane_term_i[6] + lane_term_i[7]))) +
+        (lane_term_i[8] + lane_term_i[9]);
+
+    wire signed [47:0] lane_sum_q =
+        (((lane_term_q[0] + lane_term_q[1]) + (lane_term_q[2] + lane_term_q[3])) +
+         ((lane_term_q[4] + lane_term_q[5]) + (lane_term_q[6] + lane_term_q[7]))) +
+        (lane_term_q[8] + lane_term_q[9]);
+
+    wire lane_result_valid = (lane_valid_o === {LANES{1'b1}});
+    wire lane_result_slot = lane_slot_o[0];
+    wire [1:0] lane_result_phase = lane_phase_o[1:0];
+    wire signed [47:0] acc_next_i =
+        (lane_result_phase == 2'd0) ? lane_sum_i : (acc_i[lane_result_slot] + lane_sum_i);
+    wire signed [47:0] acc_next_q =
+        (lane_result_phase == 2'd0) ? lane_sum_q : (acc_q[lane_result_slot] + lane_sum_q);
+
+    genvar g;
+    generate
+        for (g = 0; g < LANES; g = g + 1) begin : gen_lanes
+            localparam [5:0] LANE_ID = g;
+            wire [5:0] term_idx = ({4'd0, issue_phase} * LANES_SIZED) + LANE_ID;
+            wire signed [COEF_WIDTH-1:0] lane_coef_r =
+                (term_idx < N_TERMS_SIZED) ? coef_real[term_idx] : {COEF_WIDTH{1'b0}};
+            wire signed [COEF_WIDTH-1:0] lane_coef_i =
+                (term_idx < N_TERMS_SIZED) ? coef_imag[term_idx] : {COEF_WIDTH{1'b0}};
+
+            gmp_mac_lane #(
+                .SAMPLE_WIDTH(SAMPLE_WIDTH),
+                .COEF_WIDTH(COEF_WIDTH)
+            ) lane (
+                .clk(clk),
+                .resetn(resetn),
+                .valid_i(issue_valid),
+                .slot_i(issue_slot),
+                .phase_i(issue_phase),
+                .term_idx_i(term_idx),
+                .i0_i(issue_i0), .q0_i(issue_q0),
+                .i1_i(issue_i1), .q1_i(issue_q1),
+                .i2_i(issue_i2), .q2_i(issue_q2),
+                .i3_i(issue_i3), .q3_i(issue_q3),
+                .i4_i(issue_i4), .q4_i(issue_q4),
+                .m0_i(issue_m0), .m1_i(issue_m1), .m2_i(issue_m2), .m3_i(issue_m3), .m4_i(issue_m4),
+                .p20_i(issue_p20), .p21_i(issue_p21), .p22_i(issue_p22), .p23_i(issue_p23), .p24_i(issue_p24),
+                .p30_i(issue_p30), .p31_i(issue_p31), .p32_i(issue_p32), .p33_i(issue_p33), .p34_i(issue_p34),
+                .p40_i(issue_p40), .p41_i(issue_p41), .p42_i(issue_p42), .p43_i(issue_p43), .p44_i(issue_p44),
+                .coef_real_i(lane_coef_r),
+                .coef_imag_i(lane_coef_i),
+                .valid_o(lane_valid_o[g]),
+                .slot_o(lane_slot_o[g]),
+                .phase_o(lane_phase_o[(2*g)+1:(2*g)]),
+                .term_i_o(lane_term_i[g]),
+                .term_q_o(lane_term_q[g])
+            );
+        end
+    endgenerate
 
     integer k;
 
@@ -232,218 +346,54 @@ module gmp_engine #(
         end
     endfunction
 
-    function automatic [2:0] term_x_pos;
-        input [5:0] idx;
+    function automatic [31:0] mag2_from_iq;
+        input signed [SAMPLE_WIDTH-1:0] ii;
+        input signed [SAMPLE_WIDTH-1:0] qq;
+        reg signed [31:0] ii_sq;
+        reg signed [31:0] qq_sq;
         begin
-            case (idx)
-                6'd0, 6'd3, 6'd6, 6'd9, 6'd12, 6'd15, 6'd18, 6'd21, 6'd24, 6'd27, 6'd30, 6'd33, 6'd36: term_x_pos = 3'd0;
-                6'd1, 6'd4, 6'd7, 6'd10, 6'd13, 6'd16, 6'd19, 6'd22, 6'd25, 6'd28, 6'd31, 6'd34, 6'd37: term_x_pos = 3'd1;
-                default: term_x_pos = 3'd2;
-            endcase
+            ii_sq = ii * ii;
+            qq_sq = qq * qq;
+            mag2_from_iq = ii_sq + qq_sq;
         end
     endfunction
 
-    function automatic [2:0] term_amp_pos;
-        input [5:0] idx;
+    isqrt32_pipe sqrt_pipe (
+        .clk(clk),
+        .resetn(resetn),
+        .valid_i(feat_s1_valid),
+        .value_i(feat_s1_mag2),
+        .valid_o(sqrt_valid),
+        .root_o(sqrt_mag)
+    );
+
+    task automatic store_new_window;
         begin
-            case (idx)
-                6'd3, 6'd12, 6'd21, 6'd30: term_amp_pos = 3'd0;
-                6'd4, 6'd6, 6'd13, 6'd15, 6'd22, 6'd24, 6'd31, 6'd33: term_amp_pos = 3'd1;
-                6'd5, 6'd7, 6'd9, 6'd14, 6'd16, 6'd18, 6'd23, 6'd25, 6'd27, 6'd32, 6'd34, 6'd36: term_amp_pos = 3'd2;
-                6'd8, 6'd10, 6'd17, 6'd19, 6'd26, 6'd28, 6'd35, 6'd37: term_amp_pos = 3'd3;
-                6'd11, 6'd20, 6'd29, 6'd38: term_amp_pos = 3'd4;
-                default: term_amp_pos = 3'd0;
-            endcase
+            x_i0 <= n_i0; x_q0 <= n_q0; x_m0 <= n_m0;
+            x_i1 <= n_i1; x_q1 <= n_q1; x_m1 <= n_m1;
+            x_i2 <= n_i2; x_q2 <= n_q2; x_m2 <= n_m2;
+            x_i3 <= n_i3; x_q3 <= n_q3; x_m3 <= n_m3;
+            x_i4 <= n_i4; x_q4 <= n_q4; x_m4 <= n_m4;
+            x_p20 <= n_p20; x_p21 <= n_p21; x_p22 <= n_p22; x_p23 <= n_p23; x_p24 <= n_p24;
+            x_p30 <= n_p30; x_p31 <= n_p31; x_p32 <= n_p32; x_p33 <= n_p33; x_p34 <= n_p34;
+            x_p40 <= n_p40; x_p41 <= n_p41; x_p42 <= n_p42; x_p43 <= n_p43; x_p44 <= n_p44;
+
+            w_i0 <= n_i0; w_q0 <= n_q0; w_m0 <= n_m0;
+            w_i1 <= n_i1; w_q1 <= n_q1; w_m1 <= n_m1;
+            w_i2 <= n_i2; w_q2 <= n_q2; w_m2 <= n_m2;
+            w_i3 <= n_i3; w_q3 <= n_q3; w_m3 <= n_m3;
+            w_i4 <= n_i4; w_q4 <= n_q4; w_m4 <= n_m4;
+            w_p20 <= n_p20; w_p21 <= n_p21; w_p22 <= n_p22; w_p23 <= n_p23; w_p24 <= n_p24;
+            w_p30 <= n_p30; w_p31 <= n_p31; w_p32 <= n_p32; w_p33 <= n_p33; w_p34 <= n_p34;
+            w_p40 <= n_p40; w_p41 <= n_p41; w_p42 <= n_p42; w_p43 <= n_p43; w_p44 <= n_p44;
         end
-    endfunction
-
-    function automatic [2:0] term_power;
-        input [5:0] idx;
-        begin
-            if (idx < 6'd3)
-                term_power = 3'd0;
-            else if (idx < 6'd12)
-                term_power = 3'd1;
-            else if (idx < 6'd21)
-                term_power = 3'd2;
-            else if (idx < 6'd30)
-                term_power = 3'd3;
-            else
-                term_power = 3'd4;
-        end
-    endfunction
-
-    function automatic signed [SAMPLE_WIDTH-1:0] pick_i;
-        input [2:0] pos;
-        input signed [SAMPLE_WIDTH-1:0] i0, i1, i2, i3, i4;
-        begin
-            case (pos)
-                3'd0: pick_i = i0;
-                3'd1: pick_i = i1;
-                3'd2: pick_i = i2;
-                3'd3: pick_i = i3;
-                default: pick_i = i4;
-            endcase
-        end
-    endfunction
-
-    function automatic signed [SAMPLE_WIDTH-1:0] pick_q;
-        input [2:0] pos;
-        input signed [SAMPLE_WIDTH-1:0] q0, q1, q2, q3, q4;
-        begin
-            case (pos)
-                3'd0: pick_q = q0;
-                3'd1: pick_q = q1;
-                3'd2: pick_q = q2;
-                3'd3: pick_q = q3;
-                default: pick_q = q4;
-            endcase
-        end
-    endfunction
-
-    function automatic [15:0] pick_m;
-        input [2:0] pos;
-        input [15:0] m0, m1, m2, m3, m4;
-        begin
-            case (pos)
-                3'd0: pick_m = m0;
-                3'd1: pick_m = m1;
-                3'd2: pick_m = m2;
-                3'd3: pick_m = m3;
-                default: pick_m = m4;
-            endcase
-        end
-    endfunction
-
-    function automatic signed [47:0] basis_component;
-        input signed [SAMPLE_WIDTH-1:0] comp;
-        input [15:0] amp;
-        input [15:0] amp2;
-        input [15:0] amp3;
-        input [15:0] amp4;
-        input [2:0] power;
-        reg [15:0] amp_pow;
-        reg signed [16:0] amp_pow_signed;
-        reg signed [47:0] product;
-        begin
-            case (power)
-                3'd0: amp_pow = 16'h7fff;
-                3'd1: amp_pow = amp;
-                3'd2: amp_pow = amp2;
-                3'd3: amp_pow = amp3;
-                default: amp_pow = amp4;
-            endcase
-            if (power == 0) begin
-                basis_component = comp;
-            end else begin
-                amp_pow_signed = {1'b0, amp_pow};
-                product = comp * amp_pow_signed;
-                basis_component = product >>> 15;
-            end
-        end
-    endfunction
-
-    function automatic signed [47:0] phase_acc_i;
-        input [1:0] phase;
-        input signed [SAMPLE_WIDTH-1:0] i0, q0, i1, q1, i2, q2, i3, q3, i4, q4;
-        input [15:0] m0, m1, m2, m3, m4;
-        input [15:0] p20, p21, p22, p23, p24;
-        input [15:0] p30, p31, p32, p33, p34;
-        input [15:0] p40, p41, p42, p43, p44;
-        integer lane;
-        integer idx;
-        reg [2:0] amp_pos;
-        reg [2:0] x_pos;
-        reg [2:0] power;
-        reg signed [47:0] basis_i;
-        reg signed [47:0] basis_q;
-        reg signed [65:0] prod_i;
-        begin
-            phase_acc_i = 48'sd0;
-            for (lane = 0; lane < 10; lane = lane + 1) begin
-                idx = (phase * 10) + lane;
-                if (idx < N_TERMS) begin
-                    x_pos = term_x_pos(idx[5:0]);
-                    amp_pos = term_amp_pos(idx[5:0]);
-                    power = term_power(idx[5:0]);
-                    basis_i = basis_component(pick_i(x_pos, i0, i1, i2, i3, i4),
-                                              pick_m(amp_pos, m0, m1, m2, m3, m4),
-                                              pick_m(amp_pos, p20, p21, p22, p23, p24),
-                                              pick_m(amp_pos, p30, p31, p32, p33, p34),
-                                              pick_m(amp_pos, p40, p41, p42, p43, p44),
-                                              power);
-                    basis_q = basis_component(pick_q(x_pos, q0, q1, q2, q3, q4),
-                                              pick_m(amp_pos, m0, m1, m2, m3, m4),
-                                              pick_m(amp_pos, p20, p21, p22, p23, p24),
-                                              pick_m(amp_pos, p30, p31, p32, p33, p34),
-                                              pick_m(amp_pos, p40, p41, p42, p43, p44),
-                                              power);
-                    prod_i = (basis_i * coef_real[idx]) - (basis_q * coef_imag[idx]);
-                    phase_acc_i = phase_acc_i + (prod_i >>> 16);
-                end
-            end
-        end
-    endfunction
-
-    function automatic signed [47:0] phase_acc_q;
-        input [1:0] phase;
-        input signed [SAMPLE_WIDTH-1:0] i0, q0, i1, q1, i2, q2, i3, q3, i4, q4;
-        input [15:0] m0, m1, m2, m3, m4;
-        input [15:0] p20, p21, p22, p23, p24;
-        input [15:0] p30, p31, p32, p33, p34;
-        input [15:0] p40, p41, p42, p43, p44;
-        integer lane;
-        integer idx;
-        reg [2:0] amp_pos;
-        reg [2:0] x_pos;
-        reg [2:0] power;
-        reg signed [47:0] basis_i;
-        reg signed [47:0] basis_q;
-        reg signed [65:0] prod_q;
-        begin
-            phase_acc_q = 48'sd0;
-            for (lane = 0; lane < 10; lane = lane + 1) begin
-                idx = (phase * 10) + lane;
-                if (idx < N_TERMS) begin
-                    x_pos = term_x_pos(idx[5:0]);
-                    amp_pos = term_amp_pos(idx[5:0]);
-                    power = term_power(idx[5:0]);
-                    basis_i = basis_component(pick_i(x_pos, i0, i1, i2, i3, i4),
-                                              pick_m(amp_pos, m0, m1, m2, m3, m4),
-                                              pick_m(amp_pos, p20, p21, p22, p23, p24),
-                                              pick_m(amp_pos, p30, p31, p32, p33, p34),
-                                              pick_m(amp_pos, p40, p41, p42, p43, p44),
-                                              power);
-                    basis_q = basis_component(pick_q(x_pos, q0, q1, q2, q3, q4),
-                                              pick_m(amp_pos, m0, m1, m2, m3, m4),
-                                              pick_m(amp_pos, p20, p21, p22, p23, p24),
-                                              pick_m(amp_pos, p30, p31, p32, p33, p34),
-                                              pick_m(amp_pos, p40, p41, p42, p43, p44),
-                                              power);
-                    prod_q = (basis_i * coef_imag[idx]) + (basis_q * coef_real[idx]);
-                    phase_acc_q = phase_acc_q + (prod_q >>> 16);
-                end
-            end
-        end
-    endfunction
-
-    assign phase_acc_i_w = phase_acc_i(phase_sel,
-                                       phase_i0, phase_q0, phase_i1, phase_q1, phase_i2, phase_q2, phase_i3, phase_q3, phase_i4, phase_q4,
-                                       phase_m0, phase_m1, phase_m2, phase_m3, phase_m4,
-                                       phase_p20, phase_p21, phase_p22, phase_p23, phase_p24,
-                                       phase_p30, phase_p31, phase_p32, phase_p33, phase_p34,
-                                       phase_p40, phase_p41, phase_p42, phase_p43, phase_p44);
-
-    assign phase_acc_q_w = phase_acc_q(phase_sel,
-                                       phase_i0, phase_q0, phase_i1, phase_q1, phase_i2, phase_q2, phase_i3, phase_q3, phase_i4, phase_q4,
-                                       phase_m0, phase_m1, phase_m2, phase_m3, phase_m4,
-                                       phase_p20, phase_p21, phase_p22, phase_p23, phase_p24,
-                                       phase_p30, phase_p31, phase_p32, phase_p33, phase_p34,
-                                       phase_p40, phase_p41, phase_p42, phase_p43, phase_p44);
+    endtask
 
     task automatic clear_windows;
         begin
             valid_count <= 3'd0;
+            active_slot <= 1'b0;
+            next_slot <= 1'b0;
             x_i0 <= 0; x_q0 <= 0; x_m0 <= 0;
             x_i1 <= 0; x_q1 <= 0; x_m1 <= 0;
             x_i2 <= 0; x_q2 <= 0; x_m2 <= 0;
@@ -460,8 +410,97 @@ module gmp_engine #(
             w_p20 <= 0; w_p21 <= 0; w_p22 <= 0; w_p23 <= 0; w_p24 <= 0;
             w_p30 <= 0; w_p31 <= 0; w_p32 <= 0; w_p33 <= 0; w_p34 <= 0;
             w_p40 <= 0; w_p41 <= 0; w_p42 <= 0; w_p43 <= 0; w_p44 <= 0;
-            acc_i <= 48'sd0;
-            acc_q <= 48'sd0;
+            acc_i[0] <= 48'sd0; acc_i[1] <= 48'sd0;
+            acc_q[0] <= 48'sd0; acc_q[1] <= 48'sd0;
+        end
+    endtask
+
+    task automatic clear_feature_pipeline;
+        integer p;
+        begin
+            raw_cooldown <= 2'd0;
+            feat_s0_valid <= 1'b0;
+            feat_s0_i <= 0;
+            feat_s0_q <= 0;
+            feat_s1_valid <= 1'b0;
+            feat_s1_i <= 0;
+            feat_s1_q <= 0;
+            feat_s1_mag2 <= 32'd0;
+            for (p = 0; p < 17; p = p + 1) begin
+                sqrt_side_valid[p] <= 1'b0;
+                sqrt_i_pipe[p] <= 0;
+                sqrt_q_pipe[p] <= 0;
+            end
+            feat_s2_valid <= 1'b0;
+            feat_s2_i <= 0;
+            feat_s2_q <= 0;
+            feat_s2_m <= 16'd0;
+            feat_s2_p2 <= 16'd0;
+            feat_s3_valid <= 1'b0;
+            feat_s3_i <= 0;
+            feat_s3_q <= 0;
+            feat_s3_m <= 16'd0;
+            feat_s3_p2 <= 16'd0;
+            feat_s3_p3 <= 16'd0;
+            feat_valid <= 1'b0;
+            feat_i <= 0;
+            feat_q <= 0;
+            feat_m <= 16'd0;
+            feat_p2 <= 16'd0;
+            feat_p3 <= 16'd0;
+            feat_p4 <= 16'd0;
+        end
+    endtask
+
+    task automatic advance_feature_pipeline;
+        integer p;
+        begin
+            if (!enable || !coeff_loaded) begin
+                raw_cooldown <= 2'd0;
+            end else if (raw_accept) begin
+                raw_cooldown <= 2'd3;
+            end else if (raw_cooldown != 2'd0) begin
+                raw_cooldown <= raw_cooldown - 1'b1;
+            end
+
+            feat_s0_valid <= raw_accept;
+            feat_s0_i <= raw_accept ? i_in : 0;
+            feat_s0_q <= raw_accept ? q_in : 0;
+
+            feat_s1_valid <= feat_s0_valid;
+            feat_s1_i <= feat_s0_i;
+            feat_s1_q <= feat_s0_q;
+            feat_s1_mag2 <= mag2_from_iq(feat_s0_i, feat_s0_q);
+
+            sqrt_side_valid[0] <= feat_s1_valid;
+            sqrt_i_pipe[0] <= feat_s1_i;
+            sqrt_q_pipe[0] <= feat_s1_q;
+            for (p = 1; p < 17; p = p + 1) begin
+                sqrt_side_valid[p] <= sqrt_side_valid[p-1];
+                sqrt_i_pipe[p] <= sqrt_i_pipe[p-1];
+                sqrt_q_pipe[p] <= sqrt_q_pipe[p-1];
+            end
+
+            feat_s2_valid <= sqrt_valid && sqrt_side_valid[16];
+            feat_s2_i <= sqrt_i_pipe[16];
+            feat_s2_q <= sqrt_q_pipe[16];
+            feat_s2_m <= sqrt_mag;
+            feat_s2_p2 <= q15_umult(sqrt_mag, sqrt_mag);
+
+            feat_s3_valid <= feat_s2_valid;
+            feat_s3_i <= feat_s2_i;
+            feat_s3_q <= feat_s2_q;
+            feat_s3_m <= feat_s2_m;
+            feat_s3_p2 <= feat_s2_p2;
+            feat_s3_p3 <= q15_umult(feat_s2_p2, feat_s2_m);
+
+            feat_valid <= feat_s3_valid;
+            feat_i <= feat_s3_i;
+            feat_q <= feat_s3_q;
+            feat_m <= feat_s3_m;
+            feat_p2 <= feat_s3_p2;
+            feat_p3 <= feat_s3_p3;
+            feat_p4 <= q15_umult(feat_s3_p3, feat_s3_m);
         end
     endtask
 
@@ -475,13 +514,22 @@ module gmp_engine #(
             q_out <= 0;
             out_valid <= 1'b0;
             clear_windows();
-            for (k = 0; k < N_TERMS; k = k + 1) begin
-                coef_real[k] <= 0;
-                coef_imag[k] <= 0;
-            end
+            clear_feature_pipeline();
         end else begin
+            advance_feature_pipeline();
+
             if (out_valid && out_ready)
                 out_valid <= 1'b0;
+
+            if (lane_result_valid) begin
+                acc_i[lane_result_slot] <= acc_next_i;
+                acc_q[lane_result_slot] <= acc_next_q;
+                if (lane_result_phase == PHASE_LAST) begin
+                    i_out <= sat16(acc_next_i);
+                    q_out <= sat16(acc_next_q);
+                    out_valid <= 1'b1;
+                end
+            end
 
             if (reload_coeffs) begin
                 state <= STATE_LOAD;
@@ -489,6 +537,7 @@ module gmp_engine #(
                 load_addr <= {COEF_ADDR_WIDTH{1'b0}};
                 coef_addr <= {COEF_ADDR_WIDTH{1'b0}};
                 clear_windows();
+                clear_feature_pipeline();
             end else begin
                 case (state)
                     STATE_LOAD: begin
@@ -500,6 +549,8 @@ module gmp_engine #(
                         if (load_addr == N_COEF_WORDS-1) begin
                             state <= STATE_RUN;
                             coeff_loaded <= 1'b1;
+                            clear_windows();
+                            clear_feature_pipeline();
                             load_addr <= {COEF_ADDR_WIDTH{1'b0}};
                             coef_addr <= {COEF_ADDR_WIDTH{1'b0}};
                         end else begin
@@ -509,56 +560,28 @@ module gmp_engine #(
                     end
 
                     STATE_RUN: begin
-                        if (accept_sample && !enable) begin
+                        if (!enable && in_valid && in_ready) begin
                             i_out <= i_in;
                             q_out <= q_in;
                             out_valid <= 1'b1;
                         end else if (accept_sample) begin
-                            x_i0 <= n_i0; x_q0 <= n_q0; x_m0 <= n_m0;
-                            x_i1 <= n_i1; x_q1 <= n_q1; x_m1 <= n_m1;
-                            x_i2 <= n_i2; x_q2 <= n_q2; x_m2 <= n_m2;
-                            x_i3 <= n_i3; x_q3 <= n_q3; x_m3 <= n_m3;
-                            x_i4 <= n_i4; x_q4 <= n_q4; x_m4 <= n_m4;
-                            x_p20 <= n_p20; x_p21 <= n_p21; x_p22 <= n_p22; x_p23 <= n_p23; x_p24 <= n_p24;
-                            x_p30 <= n_p30; x_p31 <= n_p31; x_p32 <= n_p32; x_p33 <= n_p33; x_p34 <= n_p34;
-                            x_p40 <= n_p40; x_p41 <= n_p41; x_p42 <= n_p42; x_p43 <= n_p43; x_p44 <= n_p44;
+                            store_new_window();
                             if (valid_count < 3'd5)
                                 valid_count <= valid_count + 1'b1;
 
                             if (produce_window) begin
-                                w_i0 <= n_i0; w_q0 <= n_q0; w_m0 <= n_m0;
-                                w_i1 <= n_i1; w_q1 <= n_q1; w_m1 <= n_m1;
-                                w_i2 <= n_i2; w_q2 <= n_q2; w_m2 <= n_m2;
-                                w_i3 <= n_i3; w_q3 <= n_q3; w_m3 <= n_m3;
-                                w_i4 <= n_i4; w_q4 <= n_q4; w_m4 <= n_m4;
-                                w_p20 <= n_p20; w_p21 <= n_p21; w_p22 <= n_p22; w_p23 <= n_p23; w_p24 <= n_p24;
-                                w_p30 <= n_p30; w_p31 <= n_p31; w_p32 <= n_p32; w_p33 <= n_p33; w_p34 <= n_p34;
-                                w_p40 <= n_p40; w_p41 <= n_p41; w_p42 <= n_p42; w_p43 <= n_p43; w_p44 <= n_p44;
-                                acc_i <= phase_acc_i_w;
-                                acc_q <= phase_acc_q_w;
-                                state <= STATE_G1;
+                                acc_i[next_slot] <= 48'sd0;
+                                acc_q[next_slot] <= 48'sd0;
+                                active_slot <= next_slot;
+                                next_slot <= ~next_slot;
+                                state <= STATE_ISSUE1;
                             end
                         end
                     end
 
-                    STATE_G1: begin
-                        acc_i <= acc_i + phase_acc_i_w;
-                        acc_q <= acc_q + phase_acc_q_w;
-                        state <= STATE_G2;
-                    end
-
-                    STATE_G2: begin
-                        acc_i <= acc_i + phase_acc_i_w;
-                        acc_q <= acc_q + phase_acc_q_w;
-                        state <= STATE_G3;
-                    end
-
-                    STATE_G3: begin
-                        i_out <= sat16(acc_i + phase_acc_i_w);
-                        q_out <= sat16(acc_q + phase_acc_q_w);
-                        out_valid <= 1'b1;
-                        state <= STATE_RUN;
-                    end
+                    STATE_ISSUE1: state <= STATE_ISSUE2;
+                    STATE_ISSUE2: state <= STATE_ISSUE3;
+                    STATE_ISSUE3: state <= STATE_RUN;
 
                     default: begin
                         state <= STATE_LOAD;

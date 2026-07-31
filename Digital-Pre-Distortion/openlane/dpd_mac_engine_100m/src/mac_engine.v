@@ -73,6 +73,18 @@ module mac_engine #(
     localparam STATE_WRITE_IMAG     = 5'd17;
     localparam STATE_DONE           = 5'd18;
     localparam STATE_ERROR          = 5'd19;
+    localparam STATE_FEATURE_INIT   = 5'd20;
+    localparam STATE_FEATURE_SQRT   = 5'd21;
+    localparam STATE_FEATURE_P2     = 5'd22;
+    localparam STATE_FEATURE_P3     = 5'd23;
+    localparam STATE_FEATURE_P4     = 5'd24;
+    localparam STATE_FEATURE_SHIFT  = 5'd25;
+    localparam STATE_MODEL_MUL      = 5'd26;
+    localparam STATE_MODEL_COMB     = 5'd27;
+    localparam STATE_MODEL_ACC      = 5'd28;
+    localparam STATE_ACCUM_MUL      = 5'd29;
+    localparam STATE_ACCUM_COMB     = 5'd30;
+    localparam STATE_ACCUM_WRITE    = 5'd31;
 
     reg [4:0] state;
     reg [TRAIN_COUNT_WIDTH-1:0] sample_count;
@@ -80,6 +92,7 @@ module mac_engine #(
     reg [5:0] term_idx;
     reg [5:0] copy_idx;
     reg [4:0] epoch_count;
+    reg [1:0] read_wait_count;
     reg have_best;
     reg stop_after_copy;
 
@@ -124,10 +137,46 @@ module mac_engine #(
     reg signed [SAMPLE_WIDTH-1:0] model_err_i;
     reg signed [SAMPLE_WIDTH-1:0] model_err_q;
 
-    wire signed [SAMPLE_WIDTH-1:0] snap_ref_i = mac_rd_data[(4*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
-    wire signed [SAMPLE_WIDTH-1:0] snap_ref_q = mac_rd_data[(3*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
-    wire signed [SAMPLE_WIDTH-1:0] snap_fb_i  = mac_rd_data[(2*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
-    wire signed [SAMPLE_WIDTH-1:0] snap_fb_q  = mac_rd_data[(1*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
+    reg signed [SAMPLE_WIDTH-1:0] snap_ref_i;
+    reg signed [SAMPLE_WIDTH-1:0] snap_ref_q;
+    reg signed [SAMPLE_WIDTH-1:0] snap_fb_i;
+    reg signed [SAMPLE_WIDTH-1:0] snap_fb_q;
+    reg [15:0] new_mag;
+    reg [15:0] new_p2;
+    reg [15:0] new_p3;
+    reg [15:0] new_p4;
+
+    reg [31:0] sqrt_value;
+    reg [31:0] sqrt_result;
+    reg [31:0] sqrt_bit;
+    reg [4:0] sqrt_count;
+
+    reg signed [47:0] basis_i_r;
+    reg signed [47:0] basis_q_r;
+    reg signed [SAMPLE_WIDTH-1:0] basis_comp_i_r;
+    reg signed [SAMPLE_WIDTH-1:0] basis_comp_q_r;
+    reg [15:0] basis_amp_pow_r;
+    reg basis_linear_r;
+    reg signed [65:0] model_mul_ir;
+    reg signed [65:0] model_mul_qi;
+    reg signed [65:0] model_mul_ii;
+    reg signed [65:0] model_mul_qr;
+    reg signed [47:0] model_term_i;
+    reg signed [47:0] model_term_q;
+    reg signed [63:0] acc_mul_ei_bi;
+    reg signed [63:0] acc_mul_eq_bq;
+    reg signed [63:0] acc_mul_eq_bi;
+    reg signed [63:0] acc_mul_ei_bq;
+    reg signed [95:0] acc_mul_bi_bi;
+    reg signed [95:0] acc_mul_bq_bq;
+    reg signed [ACC_WIDTH-1:0] num_real_sample_r;
+    reg signed [ACC_WIDTH-1:0] num_imag_sample_r;
+    reg [ACC_WIDTH-1:0] den_sample_r;
+
+    wire signed [SAMPLE_WIDTH-1:0] rd_ref_i = mac_rd_data[(4*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
+    wire signed [SAMPLE_WIDTH-1:0] rd_ref_q = mac_rd_data[(3*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
+    wire signed [SAMPLE_WIDTH-1:0] rd_fb_i  = mac_rd_data[(2*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
+    wire signed [SAMPLE_WIDTH-1:0] rd_fb_q  = mac_rd_data[(1*SAMPLE_WIDTH)-1 -: SAMPLE_WIDTH];
 
     wire signed [SAMPLE_WIDTH-1:0] n_fb_i0 = fb_i1;
     wire signed [SAMPLE_WIDTH-1:0] n_fb_q0 = fb_q1;
@@ -150,11 +199,6 @@ module mac_engine #(
     wire signed [SAMPLE_WIDTH-1:0] n_ref_q3 = ref_q4;
     wire signed [SAMPLE_WIDTH-1:0] n_ref_i4 = snap_ref_i;
     wire signed [SAMPLE_WIDTH-1:0] n_ref_q4 = snap_ref_q;
-
-    wire [15:0] new_mag = mag_q15(snap_fb_i, snap_fb_q);
-    wire [15:0] new_p2 = q15_umult(new_mag, new_mag);
-    wire [15:0] new_p3 = q15_umult(new_p2, new_mag);
-    wire [15:0] new_p4 = q15_umult(new_p3, new_mag);
 
     wire [15:0] n_m0 = fb_m1;
     wire [15:0] n_m1 = fb_m2;
@@ -184,22 +228,12 @@ module mac_engine #(
     wire [SAMPLE_WIDTH:0] abs_err_i = err_i[SAMPLE_WIDTH] ? -err_i : err_i;
     wire [SAMPLE_WIDTH:0] abs_err_q = err_q[SAMPLE_WIDTH] ? -err_q : err_q;
 
-    wire signed [47:0] basis_i_now = basis_i_term(term_idx);
-    wire signed [47:0] basis_q_now = basis_q_term(term_idx);
-    wire signed [65:0] model_prod_i =
-        (basis_i_now * coef_real_cur[term_idx]) - (basis_q_now * coef_imag_cur[term_idx]);
-    wire signed [65:0] model_prod_q =
-        (basis_i_now * coef_imag_cur[term_idx]) + (basis_q_now * coef_real_cur[term_idx]);
-
-    wire signed [63:0] num_real_prod =
-        (model_err_i * basis_i_now) + (model_err_q * basis_q_now);
-    wire signed [63:0] num_imag_prod =
-        (model_err_q * basis_i_now) - (model_err_i * basis_q_now);
-    wire [63:0] den_prod =
-        (basis_i_now * basis_i_now) + (basis_q_now * basis_q_now);
-    wire signed [ACC_WIDTH-1:0] num_real_sample = num_real_prod[ACC_WIDTH-1:0];
-    wire signed [ACC_WIDTH-1:0] num_imag_sample = num_imag_prod[ACC_WIDTH-1:0];
-    wire [ACC_WIDTH-1:0] den_sample = den_prod[ACC_WIDTH-1:0];
+    wire [31:0] sqrt_trial = sqrt_result + sqrt_bit;
+    wire sqrt_take = sqrt_value >= sqrt_trial;
+    wire [31:0] sqrt_value_next = sqrt_take ? (sqrt_value - sqrt_trial) : sqrt_value;
+    wire [31:0] sqrt_result_next = sqrt_take ? ((sqrt_result >> 1) + sqrt_bit) : (sqrt_result >> 1);
+    wire [15:0] sqrt_result_sat =
+        (sqrt_result_next > 32'd32767) ? 16'h7fff : sqrt_result_next[15:0];
 
     wire signed [48:0] ref_i2_ext = {{(49-SAMPLE_WIDTH){ref_i2[SAMPLE_WIDTH-1]}}, ref_i2};
     wire signed [48:0] ref_q2_ext = {{(49-SAMPLE_WIDTH){ref_q2[SAMPLE_WIDTH-1]}}, ref_q2};
@@ -259,52 +293,6 @@ module mac_engine #(
         end
     endfunction
 
-    function automatic [15:0] isqrt32;
-        input [31:0] value_in;
-        reg [31:0] value;
-        reg [31:0] result;
-        reg [31:0] bit_val;
-        integer iter;
-        begin
-            value = value_in;
-            result = 32'd0;
-            bit_val = 32'h4000_0000;
-            for (iter = 0; iter < 16; iter = iter + 1) begin
-                if (bit_val > value)
-                    bit_val = bit_val >> 2;
-            end
-            for (iter = 0; iter < 16; iter = iter + 1) begin
-                if (bit_val != 0) begin
-                    if (value >= result + bit_val) begin
-                        value = value - (result + bit_val);
-                        result = (result >> 1) + bit_val;
-                    end else begin
-                        result = result >> 1;
-                    end
-                    bit_val = bit_val >> 2;
-                end
-            end
-            if (result > 32'd32767)
-                isqrt32 = 16'h7fff;
-            else
-                isqrt32 = result[15:0];
-        end
-    endfunction
-
-    function automatic [15:0] mag_q15;
-        input signed [SAMPLE_WIDTH-1:0] ii;
-        input signed [SAMPLE_WIDTH-1:0] qq;
-        reg signed [31:0] ii_sq;
-        reg signed [31:0] qq_sq;
-        reg [31:0] mag2;
-        begin
-            ii_sq = ii * ii;
-            qq_sq = qq * qq;
-            mag2 = ii_sq + qq_sq;
-            mag_q15 = isqrt32(mag2);
-        end
-    endfunction
-
     function automatic [15:0] q15_umult;
         input [15:0] lhs;
         input [15:0] rhs;
@@ -318,25 +306,17 @@ module mac_engine #(
         end
     endfunction
 
-    function automatic [15:0] amp_power;
-        input [15:0] amp;
+    function automatic [15:0] pick_amp_power;
+        input [2:0] pos;
         input [2:0] power;
-        reg [63:0] value;
-        integer p;
         begin
-            if (power == 0) begin
-                amp_power = 16'h7fff;
-            end else begin
-                value = amp;
-                for (p = 1; p < 5; p = p + 1) begin
-                    if (p < power)
-                        value = (value * amp) >>> 15;
-                end
-                if (value > 64'd32767)
-                    amp_power = 16'h7fff;
-                else
-                    amp_power = value[15:0];
-            end
+            case (power)
+                3'd0: pick_amp_power = 16'h7fff;
+                3'd1: pick_amp_power = pick_m(pos, fb_m0, fb_m1, fb_m2, fb_m3, fb_m4);
+                3'd2: pick_amp_power = pick_m(pos, fb_p20, fb_p21, fb_p22, fb_p23, fb_p24);
+                3'd3: pick_amp_power = pick_m(pos, fb_p30, fb_p31, fb_p32, fb_p33, fb_p34);
+                default: pick_amp_power = pick_m(pos, fb_p40, fb_p41, fb_p42, fb_p43, fb_p44);
+            endcase
         end
     endfunction
 
@@ -421,60 +401,6 @@ module mac_engine #(
         end
     endfunction
 
-    function automatic signed [47:0] basis_component;
-        input signed [SAMPLE_WIDTH-1:0] comp;
-        input [15:0] amp;
-        input [15:0] amp2;
-        input [15:0] amp3;
-        input [15:0] amp4;
-        input [2:0] power;
-        reg [15:0] amp_pow;
-        reg signed [16:0] amp_pow_signed;
-        reg signed [47:0] product;
-        begin
-            amp_pow = amp_power(amp, power);
-            if (power == 0) begin
-                basis_component = comp;
-            end else begin
-                amp_pow_signed = {1'b0, amp_pow};
-                product = comp * amp_pow_signed;
-                basis_component = product >>> 15;
-            end
-        end
-    endfunction
-
-    function automatic signed [47:0] basis_i_term;
-        input [5:0] idx;
-        reg [2:0] xpos;
-        reg [2:0] apos;
-        begin
-            xpos = term_x_pos(idx);
-            apos = term_amp_pos(idx);
-            basis_i_term = basis_component(pick_i(xpos),
-                                           pick_m(apos, fb_m0, fb_m1, fb_m2, fb_m3, fb_m4),
-                                           pick_m(apos, fb_p20, fb_p21, fb_p22, fb_p23, fb_p24),
-                                           pick_m(apos, fb_p30, fb_p31, fb_p32, fb_p33, fb_p34),
-                                           pick_m(apos, fb_p40, fb_p41, fb_p42, fb_p43, fb_p44),
-                                           term_power(idx));
-        end
-    endfunction
-
-    function automatic signed [47:0] basis_q_term;
-        input [5:0] idx;
-        reg [2:0] xpos;
-        reg [2:0] apos;
-        begin
-            xpos = term_x_pos(idx);
-            apos = term_amp_pos(idx);
-            basis_q_term = basis_component(pick_q(xpos),
-                                           pick_m(apos, fb_m0, fb_m1, fb_m2, fb_m3, fb_m4),
-                                           pick_m(apos, fb_p20, fb_p21, fb_p22, fb_p23, fb_p24),
-                                           pick_m(apos, fb_p30, fb_p31, fb_p32, fb_p33, fb_p34),
-                                           pick_m(apos, fb_p40, fb_p41, fb_p42, fb_p43, fb_p44),
-                                           term_power(idx));
-        end
-    endfunction
-
     function automatic [ACC_WIDTH-1:0] abs_acc;
         input signed [ACC_WIDTH-1:0] value;
         begin
@@ -537,6 +463,7 @@ module mac_engine #(
             term_idx <= 6'd0;
             copy_idx <= 6'd0;
             epoch_count <= 5'd0;
+            read_wait_count <= 2'd0;
             have_best <= 1'b0;
             stop_after_copy <= 1'b0;
             capture_lock <= 1'b0;
@@ -565,6 +492,39 @@ module mac_engine #(
             model_acc_q <= 48'sd0;
             model_err_i <= {SAMPLE_WIDTH{1'b0}};
             model_err_q <= {SAMPLE_WIDTH{1'b0}};
+            snap_ref_i <= {SAMPLE_WIDTH{1'b0}};
+            snap_ref_q <= {SAMPLE_WIDTH{1'b0}};
+            snap_fb_i <= {SAMPLE_WIDTH{1'b0}};
+            snap_fb_q <= {SAMPLE_WIDTH{1'b0}};
+            new_mag <= 16'd0;
+            new_p2 <= 16'd0;
+            new_p3 <= 16'd0;
+            new_p4 <= 16'd0;
+            sqrt_value <= 32'd0;
+            sqrt_result <= 32'd0;
+            sqrt_bit <= 32'd0;
+            sqrt_count <= 5'd0;
+            basis_i_r <= 48'sd0;
+            basis_q_r <= 48'sd0;
+            basis_comp_i_r <= {SAMPLE_WIDTH{1'b0}};
+            basis_comp_q_r <= {SAMPLE_WIDTH{1'b0}};
+            basis_amp_pow_r <= 16'd0;
+            basis_linear_r <= 1'b0;
+            model_mul_ir <= 66'sd0;
+            model_mul_qi <= 66'sd0;
+            model_mul_ii <= 66'sd0;
+            model_mul_qr <= 66'sd0;
+            model_term_i <= 48'sd0;
+            model_term_q <= 48'sd0;
+            acc_mul_ei_bi <= 64'sd0;
+            acc_mul_eq_bq <= 64'sd0;
+            acc_mul_eq_bi <= 64'sd0;
+            acc_mul_ei_bq <= 64'sd0;
+            acc_mul_bi_bi <= 96'sd0;
+            acc_mul_bq_bq <= 96'sd0;
+            num_real_sample_r <= {ACC_WIDTH{1'b0}};
+            num_imag_sample_r <= {ACC_WIDTH{1'b0}};
+            den_sample_r <= {ACC_WIDTH{1'b0}};
             clear_windows();
             for (k = 0; k < N_GMP_TERMS; k = k + 1) begin
                 acc_num_real[k] <= {ACC_WIDTH{1'b0}};
@@ -604,6 +564,39 @@ module mac_engine #(
                             model_acc_q <= 48'sd0;
                             model_err_i <= {SAMPLE_WIDTH{1'b0}};
                             model_err_q <= {SAMPLE_WIDTH{1'b0}};
+                            snap_ref_i <= {SAMPLE_WIDTH{1'b0}};
+                            snap_ref_q <= {SAMPLE_WIDTH{1'b0}};
+                            snap_fb_i <= {SAMPLE_WIDTH{1'b0}};
+                            snap_fb_q <= {SAMPLE_WIDTH{1'b0}};
+                            new_mag <= 16'd0;
+                            new_p2 <= 16'd0;
+                            new_p3 <= 16'd0;
+                            new_p4 <= 16'd0;
+                            sqrt_value <= 32'd0;
+                            sqrt_result <= 32'd0;
+                            sqrt_bit <= 32'd0;
+                            sqrt_count <= 5'd0;
+                            basis_i_r <= 48'sd0;
+                            basis_q_r <= 48'sd0;
+                            basis_comp_i_r <= {SAMPLE_WIDTH{1'b0}};
+                            basis_comp_q_r <= {SAMPLE_WIDTH{1'b0}};
+                            basis_amp_pow_r <= 16'd0;
+                            basis_linear_r <= 1'b0;
+                            model_mul_ir <= 66'sd0;
+                            model_mul_qi <= 66'sd0;
+                            model_mul_ii <= 66'sd0;
+                            model_mul_qr <= 66'sd0;
+                            model_term_i <= 48'sd0;
+                            model_term_q <= 48'sd0;
+                            acc_mul_ei_bi <= 64'sd0;
+                            acc_mul_eq_bq <= 64'sd0;
+                            acc_mul_eq_bi <= 64'sd0;
+                            acc_mul_ei_bq <= 64'sd0;
+                            acc_mul_bi_bi <= 96'sd0;
+                            acc_mul_bq_bq <= 96'sd0;
+                            num_real_sample_r <= {ACC_WIDTH{1'b0}};
+                            num_imag_sample_r <= {ACC_WIDTH{1'b0}};
+                            den_sample_r <= {ACC_WIDTH{1'b0}};
                             clear_windows();
                             for (k = 0; k < N_GMP_TERMS; k = k + 1) begin
                                 acc_num_real[k] <= {ACC_WIDTH{1'b0}};
@@ -626,14 +619,74 @@ module mac_engine #(
                     train_busy <= 1'b1;
                     capture_lock <= 1'b1;
                     mac_rd_en <= 1'b1;
+                    read_wait_count <= 2'd2;
                     state <= STATE_LATCH;
                 end
 
                 STATE_LATCH: begin
                     train_busy <= 1'b1;
                     capture_lock <= 1'b1;
-                    status_error_acc <= status_error_acc + abs_err_i + abs_err_q;
+                    if (read_wait_count != 2'd0) begin
+                        read_wait_count <= read_wait_count - 1'b1;
+                    end else begin
+                        mac_rd_en <= 1'b0;
+                        snap_ref_i <= rd_ref_i;
+                        snap_ref_q <= rd_ref_q;
+                        snap_fb_i <= rd_fb_i;
+                        snap_fb_q <= rd_fb_q;
+                        state <= STATE_FEATURE_INIT;
+                    end
+                end
 
+                STATE_FEATURE_INIT: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    status_error_acc <= status_error_acc + abs_err_i + abs_err_q;
+                    sqrt_value <= (snap_fb_i * snap_fb_i) + (snap_fb_q * snap_fb_q);
+                    sqrt_result <= 32'd0;
+                    sqrt_bit <= 32'h4000_0000;
+                    sqrt_count <= 5'd0;
+                    state <= STATE_FEATURE_SQRT;
+                end
+
+                STATE_FEATURE_SQRT: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    sqrt_value <= sqrt_value_next;
+                    sqrt_result <= sqrt_result_next;
+                    sqrt_bit <= sqrt_bit >> 2;
+                    if (sqrt_count == 5'd15) begin
+                        new_mag <= sqrt_result_sat;
+                        state <= STATE_FEATURE_P2;
+                    end else begin
+                        sqrt_count <= sqrt_count + 1'b1;
+                    end
+                end
+
+                STATE_FEATURE_P2: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    new_p2 <= q15_umult(new_mag, new_mag);
+                    state <= STATE_FEATURE_P3;
+                end
+
+                STATE_FEATURE_P3: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    new_p3 <= q15_umult(new_p2, new_mag);
+                    state <= STATE_FEATURE_P4;
+                end
+
+                STATE_FEATURE_P4: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    new_p4 <= q15_umult(new_p3, new_mag);
+                    state <= STATE_FEATURE_SHIFT;
+                end
+
+                STATE_FEATURE_SHIFT: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
                     fb_i0 <= n_fb_i0; fb_q0 <= n_fb_q0; fb_m0 <= n_m0; fb_p20 <= n_p20; fb_p30 <= n_p30; fb_p40 <= n_p40;
                     fb_i1 <= n_fb_i1; fb_q1 <= n_fb_q1; fb_m1 <= n_m1; fb_p21 <= n_p21; fb_p31 <= n_p31; fb_p41 <= n_p41;
                     fb_i2 <= n_fb_i2; fb_q2 <= n_fb_q2; fb_m2 <= n_m2; fb_p22 <= n_p22; fb_p32 <= n_p32; fb_p42 <= n_p42;
@@ -660,12 +713,48 @@ module mac_engine #(
                 STATE_MODEL: begin
                     train_busy <= 1'b1;
                     capture_lock <= 1'b1;
-                    model_acc_i <= model_acc_i + (model_prod_i >>> 16);
-                    model_acc_q <= model_acc_q + (model_prod_q >>> 16);
+                    basis_comp_i_r <= pick_i(term_x_pos(term_idx));
+                    basis_comp_q_r <= pick_q(term_x_pos(term_idx));
+                    basis_amp_pow_r <= pick_amp_power(term_amp_pos(term_idx), term_power(term_idx));
+                    basis_linear_r <= (term_power(term_idx) == 3'd0);
+                    state <= STATE_MODEL_MUL;
+                end
+
+                STATE_MODEL_MUL: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    if (basis_linear_r) begin
+                        basis_i_r <= {{(48-SAMPLE_WIDTH){basis_comp_i_r[SAMPLE_WIDTH-1]}}, basis_comp_i_r};
+                        basis_q_r <= {{(48-SAMPLE_WIDTH){basis_comp_q_r[SAMPLE_WIDTH-1]}}, basis_comp_q_r};
+                    end else begin
+                        basis_i_r <= (basis_comp_i_r * $signed({1'b0, basis_amp_pow_r})) >>> 15;
+                        basis_q_r <= (basis_comp_q_r * $signed({1'b0, basis_amp_pow_r})) >>> 15;
+                    end
+                    state <= STATE_MODEL_COMB;
+                end
+
+                STATE_MODEL_COMB: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    model_mul_ir <= basis_i_r * coef_real_cur[term_idx];
+                    model_mul_qi <= basis_q_r * coef_imag_cur[term_idx];
+                    model_mul_ii <= basis_i_r * coef_imag_cur[term_idx];
+                    model_mul_qr <= basis_q_r * coef_real_cur[term_idx];
+                    state <= STATE_MODEL_ACC;
+                end
+
+                STATE_MODEL_ACC: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    model_term_i <= (model_mul_ir - model_mul_qi) >>> 16;
+                    model_term_q <= (model_mul_ii + model_mul_qr) >>> 16;
+                    model_acc_i <= model_acc_i + ((model_mul_ir - model_mul_qi) >>> 16);
+                    model_acc_q <= model_acc_q + ((model_mul_ii + model_mul_qr) >>> 16);
                     if (term_idx == N_GMP_TERMS-1) begin
                         state <= STATE_MODEL_DONE;
                     end else begin
                         term_idx <= term_idx + 1'b1;
+                        state <= STATE_MODEL;
                     end
                 end
 
@@ -682,13 +771,52 @@ module mac_engine #(
                 STATE_ACCUM_TERM: begin
                     train_busy <= 1'b1;
                     capture_lock <= 1'b1;
-                    acc_num_real[term_idx] <= acc_num_real[term_idx] + num_real_sample;
-                    acc_num_imag[term_idx] <= acc_num_imag[term_idx] + num_imag_sample;
-                    acc_den[term_idx] <= acc_den[term_idx] + den_sample;
+                    basis_comp_i_r <= pick_i(term_x_pos(term_idx));
+                    basis_comp_q_r <= pick_q(term_x_pos(term_idx));
+                    basis_amp_pow_r <= pick_amp_power(term_amp_pos(term_idx), term_power(term_idx));
+                    basis_linear_r <= (term_power(term_idx) == 3'd0);
+                    state <= STATE_ACCUM_MUL;
+                end
+
+                STATE_ACCUM_MUL: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    if (basis_linear_r) begin
+                        basis_i_r <= {{(48-SAMPLE_WIDTH){basis_comp_i_r[SAMPLE_WIDTH-1]}}, basis_comp_i_r};
+                        basis_q_r <= {{(48-SAMPLE_WIDTH){basis_comp_q_r[SAMPLE_WIDTH-1]}}, basis_comp_q_r};
+                    end else begin
+                        basis_i_r <= (basis_comp_i_r * $signed({1'b0, basis_amp_pow_r})) >>> 15;
+                        basis_q_r <= (basis_comp_q_r * $signed({1'b0, basis_amp_pow_r})) >>> 15;
+                    end
+                    state <= STATE_ACCUM_COMB;
+                end
+
+                STATE_ACCUM_COMB: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    acc_mul_ei_bi <= model_err_i * basis_i_r;
+                    acc_mul_eq_bq <= model_err_q * basis_q_r;
+                    acc_mul_eq_bi <= model_err_q * basis_i_r;
+                    acc_mul_ei_bq <= model_err_i * basis_q_r;
+                    acc_mul_bi_bi <= basis_i_r * basis_i_r;
+                    acc_mul_bq_bq <= basis_q_r * basis_q_r;
+                    state <= STATE_ACCUM_WRITE;
+                end
+
+                STATE_ACCUM_WRITE: begin
+                    train_busy <= 1'b1;
+                    capture_lock <= 1'b1;
+                    num_real_sample_r <= acc_mul_ei_bi + acc_mul_eq_bq;
+                    num_imag_sample_r <= acc_mul_eq_bi - acc_mul_ei_bq;
+                    den_sample_r <= acc_mul_bi_bi + acc_mul_bq_bq;
+                    acc_num_real[term_idx] <= acc_num_real[term_idx] + (acc_mul_ei_bi + acc_mul_eq_bq);
+                    acc_num_imag[term_idx] <= acc_num_imag[term_idx] + (acc_mul_eq_bi - acc_mul_ei_bq);
+                    acc_den[term_idx] <= acc_den[term_idx] + (acc_mul_bi_bi + acc_mul_bq_bq);
                     if (term_idx == N_GMP_TERMS-1) begin
                         state <= STATE_NEXT_SAMPLE;
                     end else begin
                         term_idx <= term_idx + 1'b1;
+                        state <= STATE_ACCUM_TERM;
                     end
                 end
 

@@ -40,10 +40,11 @@ Memory macro note:
 | `dpd_metrics_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
 | `dpd_pico_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
 | `dpd_axi_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
-| `dpd_coef_bank_macro_100m` | `macro_route_100m_01` | route ok, GDS/LEF ok, SRAM internals treated as hard macro |
-| `dpd_capture_ram_macro_100m` | `macro_route_100m_01` | route ok, GDS/LEF ok, SRAM internals treated as hard macro |
+| `dpd_coef_bank_macro_100m` | `coef_bank_signoff_100m_04` | STA RCX 100 MHz: setup +0.16 ns, hold +0.82 ns; route/LVS/XOR clean |
+| `dpd_capture_ram_macro_100m` | `capture_ram_signoff_100m_13` | STA RCX 100 MHz: setup +1.27 ns, hold +0.01 ns; route/LVS/XOR clean |
 
-Remaining heavy manual runs:
+Blocos críticos já processados:
 
-- `dpd_gmp_engine_100m`
-- `dpd_mac_engine_100m`
+- `dpd_gmp_engine_100m`: 223170 células; global-route setup +3.16 ns e hold +0.09 ns;
+- `dpd_mac_engine_100m`: candidato `mac_core_100m_05` com 131048 células;
+  global-route setup +1.47 ns e hold +0.16 ns; detailed route em continuação.

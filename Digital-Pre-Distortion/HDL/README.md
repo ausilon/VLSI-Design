@@ -411,6 +411,7 @@ ativo, o bloco aceita uma nova amostra a cada quatro ciclos. Para uma taxa de
 24 MS/s x 4 = 96 MHz
 ```
 
-O fechamento físico preliminar indicou aproximadamente 90,9 MHz. O HDL
-funcional está coerente, mas a implementação física ainda precisa de otimização
-de timing ou redução do intervalo de iniciação para garantir margem.
+O run físico preservado atingiu, após global routing, setup de `+3,16 ns` e
+hold de `+0,09 ns` com clock de 100 MHz. Assim, o contrato `II=4` fornece
+25 MS/s. Esse resultado demonstra atendimento preliminar do throughput, mas o
+fechamento definitivo ainda depende de STA RCX multicorner.
