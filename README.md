@@ -364,9 +364,7 @@ no chip completo.
 - [OpenDPD](Digital-Pre-Distortion/opendpd/README.md)
 - [Datasets](Digital-Pre-Distortion/datasets/README.md)
 - [OpenLane/SKY130](Digital-Pre-Distortion/openlane/README.md)
-- [Estado técnico](Digital-Pre-Distortion/docs/status.md)
 - [Trabalhos futuros](Digital-Pre-Distortion/docs/future_work.md)
-- [Log técnico v3](Digital-Pre-Distortion/docs/project_log_v3.md)
 
 ---
 
