@@ -67,6 +67,16 @@ dos 39 termos em quatro fases, reduzindo área, mas exigindo clock acima de
 96 MHz para atingir 24 MS/s. A implementação atual usa dez lanes com pipeline
 de latência fixa; em 100 MHz, o contrato `II=4` fornece 25 MS/s.
 
+Essa revisão física foi revalidada no Questa em 2026-08-03: 64 saídas I/Q
+coincidiram bit a bit com o golden OpenDPD. O teste mantém `enable=1` e acrescenta
+sete amostras nulas após o vetor de 64 amostras úteis e duas de lookahead para
+drenar a pipeline física completa.
+
+A integração conjunta com Capture RAM, bancos A/B, treinamento e métricas já
+passou no `simv2` usando o `rtl_v2`. Essa evidência não deve ser confundida com
+uma regressão do top físico: ainda falta portar o mesmo cenário para as revisões
+serializadas exatas do GMPengine e do MACcore usadas neste diretório.
+
 O `MACcore` é maior que um bloco de controle comum, mas não precisa operar na
 taxa de amostragem. Ele lê snapshots da RAM e executa treinamento em background.
 Por isso, a arquitetura foi mais serializada, privilegiando redução de área em
@@ -76,29 +86,23 @@ vez de latência mínima.
 
 # Resultado Atual
 
-O `GMPengine` preservado possui 223.170 células e área de 11,498 mm². Seu STA
-pós-global-route em 100 MHz apresenta setup de `+3,16 ns` e hold de `+0,09 ns`.
-O detailed route, Magic DRC e LVS foram concluídos sem erros, mas ainda falta
-STA RCX multicorner para classificá-lo como fechado temporalmente.
+Para evitar comparar estágios físicos diferentes, os oito blocos são nivelados
+no checkpoint comum de STA single-corner pós-global-route com período-alvo de
+10 ns. A tabela auditada, incluindo células dominantes, áreas e slacks, está em
+[FLOORPLAN_CHILDREN_SUMMARY.md](FLOORPLAN_CHILDREN_SUMMARY.md).
 
-O candidato atual do `MACcore`, `mac_core_100m_05`, possui 131.048 células e
-área de 7,659 mm². Antes do detailed routing apresentou setup de `+1,47 ns` e
-hold de `+0,16 ns`. O primeiro DRT deixou um único short em met1; o script de
-continuação reaproveita o checkpoint pós-global-route e aumenta o limite para
-24 iterações.
+PicoRV32, AXI-Lite, MetricEngine, periféricos, memórias e motores DSP possuem
+artefatos físicos posteriores em diferentes graus de maturidade. Esses
+resultados continuam úteis para engenharia, mas não são misturados na tabela
+como se todos representassem STA RCX, DRC, LVS e signoff equivalentes. Também
+não se declara Fmax a partir de WNS intermediário: a frequência será consolidada
+somente após completar constraints e STA extraído multicorner na baseline
+aprovada ou no chip completo.
 
-A Capture RAM e o Coef Bank foram refeitos com fronteiras registradas, pin
-placement orientado pelos ports das SRAMs e CTS específico. Ambos fecham
-100 MHz em STA pós-route multicorner: `+1,27/+0,01 ns` para setup/hold da
-Capture RAM e `+0,16/+0,82 ns` para o Coef Bank. TritonRoute, LVS e XOR estão
-limpos. Violações reportadas pelo Magic dentro das células OpenRAM fornecidas
-são mantidas como ressalva explícita.
-
-O top atual é funcionalmente conectado, possui PDN hierárquica e die de trabalho
-de `8,5 x 8,5 mm`. O pinout reserva 108 sinais funcionais, quatro sinais DFT e
-16 alimentações para um futuro `aQFN/DRQFN-128`. O próximo run físico é
-`top_v4_memfix_100m_01`, após a conclusão do novo MACcore. Padframe, IR drop,
-potência e signoff de chip permanecem pendentes.
+O `top_v4_clean_50m_01` é a integração física experimental mais recente. Ele
+gerou floorplan, roteamento, SPEF, relatórios STA RCX e GDSII para orientar as
+iterações seguintes. Não representa signoff de chip; padframe, potência, IR
+drop e fechamento físico uniforme permanecem trabalhos posteriores.
 
 ---
 
@@ -110,6 +114,7 @@ potência e signoff de chip permanecem pendentes.
 | `run_child_signoff.tcl` | fluxo completo para blocos standard-cell |
 | `run_child_macro_route.tcl` | fluxo para blocos com SRAM macro |
 | `run_gmp_feature_piped_100m.tcl` | implementação GMP em lanes pipelineadas a 100 MHz |
+| `dpd_gmp_engine_100m/sim/run_gmp_engine_opendpd.do` | regressão bit-exata da revisão física contra o golden OpenDPD |
 | `run_mac_core_100m_05.tcl` | hardening do MACcore compatível com a Capture RAM registrada |
 | `run_mac_core_100m_05_continue_drt_01.tcl` | continuação do MACcore a partir do global-route |
 | `run_capture_*_drc_check.tcl` | auditoria da integração da Capture RAM |

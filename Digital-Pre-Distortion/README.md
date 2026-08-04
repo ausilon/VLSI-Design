@@ -100,7 +100,12 @@ boot em bypass -> captura -> treino -> escrita de coeficientes
 
 Essa validação garante coerência funcional entre o contrato de dataset, o plano
 de controle, a RAM de captura, os bancos de coeficientes e os blocos críticos de
-DSP.
+DSP. Ela foi concluída na linha funcional `rtl_v2`: o
+`tb_dpd_top_gmp_metric_integration` comparou 64 saídas do top contra o golden
+OpenDPD e leu as métricas integradas; em seguida, o
+`tb_dpd_top_full_system` validou captura, treinamento NLMS, escrita e troca dos
+bancos A/B, DPD ativo, métricas, IRQ e retreinamento. Ambos foram registrados
+com `TB PASS` no `simv2`.
 
 ---
 
@@ -127,10 +132,17 @@ tempo real.
 
 # Estado Atual
 
-O sistema HDL está validado em simulação para o fluxo principal. Capture RAM e
-Coef Bank fecharam 100 MHz em STA pós-route multicorner. GMPengine e MACcore
-possuem resultados positivos em STA pós-global-route, mas ainda requerem STA
-RCX final. O top funcional conectado, sua PDN e o pinout de 128 terminais já
-estão definidos; o próximo passo é concluir o MACcore atualizado, executar o
-top com views coerentes e implementar o padframe físico antes de considerar o
-circuito um chip final.
+O sistema HDL demonstrou em simulação o fluxo funcional principal. As revisões
+serializadas usadas no OpenLane possuem validação golden independente: o
+GMPengine reproduziu 64 saídas I/Q bit-exatas do OpenDPD, e o MACcore reproduziu
+checkpoints e coeficientes do golden NLMS de software. Portanto, a regressão
+conjunta de RAM, bancos, motores DSP e métricas está fechada para o `rtl_v2`.
+A pendência é portar e repetir essa regressão com as revisões serializadas
+exatas do OpenLane, cujas latências e interfaces físicas diferem da linha
+funcional.
+
+A implementação OpenLane demonstra viabilidade física de síntese, floorplan,
+placement e roteamento, com resultados positivos isolados de timing, DRC e LVS.
+Esses resultados permanecem experimentais porque não existe ainda um conjunto
+uniforme de runs completos para todas as macros e o top. Padframe, STA RCX
+multicorner final, potência, IR drop e signoff de chip continuam pendentes.

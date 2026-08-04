@@ -1038,36 +1038,114 @@ documentacao, mas ainda nao e um chip funcional pronto para foundry. Para virar
 tapeout real, o proximo passo e criar o top funcional conectado com padframe,
 reativar DRT/antena/LVS/STA e fechar signoff completo.
 
-### Tabela consolidada de resultados fisicos
+### Evolução da síntese e implementação física
 
-Tabela gerada a partir dos artefatos em `/home/Ausilon/openlane_work/designs`.
-As areas usam `SIZE` dos LEFs finais. As contagens logicas usam
-`reports/synthesis/1-synthesis.AREA_0.stat.rpt`. Para blocos sem `metrics.csv`
-consolidado, `Fmax` foi registrado como alvo/validacao de 100 MHz do fluxo. O
-top `soc_top_scaffold` ainda nao e chip funcional: ele e uma montagem fisica de
-macros, com DRC limpo e LVS ainda aberto.
+A comparacao foi nivelada no ultimo checkpoint comum comprovado para as oito
+macros: sintese mapeada, CTS, global routing e STA single-corner pos-global-route
+com periodo-alvo de 10 ns. As areas usam o `SIZE` dos LEFs correspondentes, as
+contagens e a celula dominante vem dos relatorios
+`1-synthesis*.stat.rpt`, e os slacks foram lidos nos logs `grt_sta`.
 
-| design_name | run | status | total_runtime | DIEAREA_mm2 | synth_cells | CellPer_mm2 | wns_ns | AND | DFF | NAND | NOR | OR | XOR | XNOR | MUX | Fmax_MHz | DRC | LVS |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| picorv32 | `signoff_100m_01` | signoff ok | 0h11m28s | 0.377 | 10114 | 26818.6 | n/a | 344 | 1704 | 498 | 269 | 459 | 34 | 75 | 2263 | 100.0 | 0 | 0 |
-| axi_ctrl | `signoff_100m_01` | signoff ok | 0h3m30s | 0.640 | 1713 | 2676.6 | n/a | 129 | 255 | 3 | 23 | 80 | 0 | 0 | 277 | 100.0 | 0 | 0 |
-| metric_engine | `signoff_100m_01` | signoff ok | 0h3m28s | 0.116 | 2593 | 22280.8 | n/a | 238 | 187 | 298 | 173 | 307 | 117 | 197 | 7 | 100.0 | 0 | 0 |
-| peripherals | `signoff_100m_01` | signoff ok | 0h1m15s | 0.044 | 755 | 17328.1 | n/a | 64 | 186 | 19 | 63 | 34 | 0 | 5 | 87 | 100.0 | 0 | 0 |
-| capture_ram | `macro_route_100m_01` | macro ok | 0h4m2s | 4.140 | 330 | 79.7 | n/a | 19 | 14 | 5 | 7 | 11 | 0 | 0 | 6 | 100.0 | 0 | 0 |
-| coef_bank | `macro_route_100m_01` | macro ok | 0h1m25s | 0.845 | 152 | 179.9 | n/a | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 50 | 100.0 | 0 | 0 |
-| gmp_engine | `signoff_100m_01` | signoff ok via continue | 12h42m4s | 12.206 | 328576 | 26919.2 | -92.630 | 38925 | 2509 | 48863 | 39185 | 41983 | 19584 | 36469 | 2595 | 90.9 | 0 | 0 |
-| mac_engine | `signoff_100m_no_prefill_01` | signoff ok | 2h11m45s | 3.987 | 91948 | 23062.2 | n/a | 5823 | 11329 | 6296 | 6840 | 7199 | 2487 | 5578 | 10968 | 100.0 | 0 | 0 |
-| soc_top_scaffold | `tapeout_full_05` | DRC ok, LVS aberto | 1h34m10s | 51.000 | 8 | 0.2 | 0.000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 90.9 | 0 | 35 |
+| Macro | Run auditado | Células | Área macro (mm²) | Setup pós-GRT (ns) | Hold pós-GRT (ns) | Dominante Cell |
+|---|---|---:|---:|---:|---:|---|
+| PicoRV32 | `signoff_100m_01` | 10.114 | 0,377 | +3,41 | +0,15 | `sky130_fd_sc_hd__buf_1` (2.422) |
+| AXI control | `signoff_100m_01` | 1.713 | 0,640 | +3,58 | +0,21 | `sky130_fd_sc_hd__buf_1` (395) |
+| Peripherals | `signoff_100m_01` | 755 | 0,044 | +4,21 | +0,19 | `sky130_fd_sc_hd__dfrtp_2` (183) |
+| MetricEngine | `signoff_100m_01` | 2.593 | 0,116 | +2,94 | +0,24 | `sky130_fd_sc_hd__nand2_2` (272) |
+| Capture RAM | `capture_ram_signoff_100m_13` | 741 (inclui 8 SRAM) | 4,140 | +3,93 | +0,26 | `sky130_fd_sc_hd__dfxtp_2` (320) |
+| Coef Bank | `coef_bank_signoff_100m_04` | 154 (inclui 2 SRAM) | 0,845 | +1,84 | +1,65 | `sky130_fd_sc_hd__buf_1` (56) |
+| GMPengine | `gmp_feature_piped_route_relaxed_100m_01` | 223.170 | 11,497 | +3,16 | +0,09 | `sky130_fd_sc_hd__nand2_2` (79.930) |
+| MACcore | `mac_core_100m_05` | 131.048 | 7,758 | +1,47 | +0,16 | `sky130_fd_sc_hd__nand2_2` (35.921) |
 
-Notas:
+A area acumulada dos oito contornos de macro e 25,418 mm2. Esse valor nao
+inclui canais entre macros, halos, padframe nem a margem de roteamento do top.
+Os slacks positivos descrevem somente os caminhos restritos nesse checkpoint;
+nao equivalem a STA RCX multicorner nem permitem declarar Fmax ou signoff.
 
-- `DIEAREA_mm2` dos blocos pequenos vem do LEF da hard macro.
-- `CellPer_mm2` e calculado como `synth_cells / DIEAREA_mm2`; para RAM/coef e
-  top scaffold esse numero nao representa densidade real de logica, pois ha
-  hard macros/memorias e preenchimento fisico.
-- `gmp_engine` fechou DRC/LVS usando fluxo de continuacao apos os problemas de
-  roteamento pesado; o `metrics.csv` ainda conserva alguns campos de uma
-  tentativa interrompida, por isso o WNS deve ser tratado como indicativo, nao
-  como signoff temporal final.
-- `soc_top_scaffold` gerou GDS e passou Magic DRC, mas falha LVS por ausencia
-  intencional do top funcional conectado e do padframe final.
+### Integração física experimental
+
+| Item | Resultado |
+|---|---:|
+| Clock-alvo | 50 MHz |
+| Celulas de integracao | 63.320 |
+| Die | 9,3 x 9,3 mm = 86,49 mm2 |
+| Setup/hold pos-GRT | +6,97 / +0,02 ns |
+| RCX multicorner nominal | -3,11 / -1,46 ns |
+| Pior RCX multicorner | -4,74 / -1,82 ns |
+| Detailed routing | 0 violacoes |
+| GDSII | Gerado |
+
+O `top_v4_clean_50m_01` e um run inicial de integracao destinado a gerar
+floorplan, roteamento, SPEF, relatorios STA RCX e GDSII para as analises
+posteriores. Esses artefatos orientam o reposicionamento, as restricoes e as
+proximas iteracoes ate a evolucao posterior do signoff; o run nao e apresentado
+como circuito fechado para fabricacao.
+
+Todas as oito macros possuem uma baseline comparavel no checkpoint
+pos-global-route. Resultados adicionais de detailed route, DRC, LVS e XOR
+permanecem como evidencias individuais e nao sao usados para elevar
+seletivamente o nivel de uma linha da tabela. Da mesma forma, nao se declara
+Fmax a partir de WNS intermediario: a frequencia de operacao sera consolidada
+somente depois de completar constraints e STA extraido multicorner na baseline
+fisica aprovada ou no chip completo.
+
+## Auditoria 2026-08-03 - goldens das revisoes OpenLane
+
+A revisao final da documentacao distinguiu duas linhas de RTL que nao devem ser
+tratadas como o mesmo artefato: a implementacao funcional em `HDL/rtl` e as
+implementacoes serializadas, preparadas para sintese fisica, em `openlane/`.
+
+Antes da serializacao fisica, a integracao conjunta ja havia sido executada no
+`simv2` sobre o `rtl_v2`. Em 2026-07-10, o
+`tb_dpd_top_gmp_metric_integration` escreveu 78 palavras Q2.16 no banco A,
+comparou 64 saidas do top contra o golden OpenDPD e leu as metricas integradas.
+Em 2026-07-11, o `tb_dpd_top_full_system` percorreu:
+
+```text
+bypass -> captura -> treino NLMS -> banco B -> troca sincronizada
+-> DPD ativo -> metricas/IRQ -> nova captura -> retreino no banco A -> troca
+```
+
+Os dois testes foram registrados com `TB PASS`; o teste full-system terminou
+com zero erros e zero warnings. Portanto, RAM, bancos, GMPengine, MACcore e
+MetricEngine possuem validacao conjunta na revisao funcional.
+
+Os dois blocos DSP criticos possuem validacao golden independente na revisao
+usada pelo OpenLane. A limitacao restante e de integracao/regressao conjunta e
+de fechamento fisico, nao de ausencia de referencia numerica nos motores.
+
+O `GMPengine` fisico foi recompilado com `gmp_mac_lane.v` e
+`isqrt32_pipe.v` e reexecutado no Questa contra os coeficientes Q2.16 e vetores
+OpenDPD preservados. Com `enable=1` e flush suficiente para a pipeline de
+features/lanes, as 64 saidas I/Q coincidiram bit a bit:
+
+```text
+[AUDIT] inputs=66 outputs=64 extra_flush=7 cycles=366
+[TB PASS] tb_gmp_engine_opendpd_openlane
+Errors: 0, Warnings: 0
+```
+
+A falha produzida pelo TB historico na revisao atual foi localizada no proprio
+contrato de teste: `enable=0` selecionava bypass e as duas amostras de
+lookahead nao drenavam toda a pipeline fisica. O teste reproduzivel da variante
+OpenLane foi separado em:
+
+```text
+openlane/dpd_gmp_engine_100m/tb/tb_gmp_engine_opendpd_openlane.sv
+openlane/dpd_gmp_engine_100m/sim/run_gmp_engine_opendpd.do
+```
+
+O `MACcore` serializado tambem foi recompilado e reexecutado contra o golden
+NLMS de software. Foram confirmados os acumuladores da primeira epoca, a escrita
+das 78 palavras de coeficientes, o melhor modelo e os valores finais:
+
+```text
+[GOLDEN] coef2=(2225,-2119) coef38_imag=-1 status_error_acc=99000 writes=78
+[TB PASS] tb_mac_engine_serial_golden
+Errors: 0, Warnings: 0
+```
+
+Esses resultados fecham a equivalencia numerica isolada dos motores fisicos.
+A pendencia nao e criar do zero uma regressao conjunta, mas portar a regressao
+ja aprovada no `simv2` para um top que instancie essas mesmas revisoes OpenLane
+e os contratos atuais de RAM, bancos e metricas.

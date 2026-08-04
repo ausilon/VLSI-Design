@@ -396,7 +396,37 @@ sim/run_mac_engine_nlms.do
 O teste `run_dpd_top_full_system.do` reproduz a sequência operacional completa:
 bypass inicial, captura, treinamento, atualização do banco de coeficientes,
 troca sincronizada, DPD ativo, cálculo de métricas e solicitação de novo
-treinamento.
+treinamento. Essa regressão foi executada no `simv2` sobre o `rtl_v2` e terminou
+com `[TB PASS] tb_dpd_top_full_system`, zero erros e zero warnings. O teste
+`tb_dpd_top_gmp_metric_integration` também passou, escrevendo as 78 palavras
+Q2.16 no banco A, comparando 64 saídas do top com o golden OpenDPD e lendo
+potência, erro, clipping e drift pelo mapa AXI-Lite.
+
+## Auditoria das variantes físicas
+
+O RTL funcional deste diretório e o RTL serializado usado no OpenLane seguem o
+mesmo contrato algorítmico GMP, mas ainda não possuem equivalência conjunta
+demonstrada e não são arquivos intercambiáveis ciclo a ciclo. A versão física
+introduz pipeline de features, dez lanes e intervalo de iniciação de quatro
+ciclos. Por isso, sua validação golden possui um TB próprio:
+
+```text
+../openlane/dpd_gmp_engine_100m/tb/tb_gmp_engine_opendpd_openlane.sv
+../openlane/dpd_gmp_engine_100m/sim/run_gmp_engine_opendpd.do
+```
+
+Na auditoria de 2026-08-03, essa revisão produziu 64 saídas I/Q bit-exatas
+contra o golden OpenDPD. O MACcore serializado também passou novamente no
+`tb_mac_engine_serial_golden`, conferindo acumuladores NLMS e coeficientes
+finais contra o golden de software. Ambas as reexecuções terminaram com zero
+erros e zero warnings.
+
+Assim, a integração conjunta de Capture RAM, Coef Bank, GMPengine, MACcore e
+MetricEngine já foi demonstrada na linha funcional `rtl_v2`, e os dois motores
+físicos possuem referência numérica independente. A pendência de verificação é
+portar essa regressão do `simv2` para um top que instancie exatamente as duas
+revisões serializadas do OpenLane, conciliando suas latências e interfaces, e
+então congelar essa composição como a implementação HDL canônica.
 
 ---
 

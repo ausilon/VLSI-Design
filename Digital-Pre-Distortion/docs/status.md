@@ -19,9 +19,23 @@ coeficientes GMP. Os coeficientes foram exportados para Q2.16 e usados na
 validação do `GMPengine`.
 
 No HDL, foram validados separadamente `GMPengine`, `MetricEngine` e `MACcore`.
-Depois disso, o `dpd_top` foi simulado em fluxo completo, incluindo bypass,
-captura, treinamento, escrita de coeficientes, troca de banco, ativação do DPD e
-pedido de retreinamento.
+As revisões serializadas usadas pelo OpenLane também possuem validação golden
+independente: o GMP físico reproduziu 64 saídas I/Q bit-exatas do OpenDPD, e o
+MACcore físico reproduziu checkpoints e coeficientes de um golden NLMS de
+software. Depois disso, o `dpd_top` funcional foi simulado em fluxo completo,
+incluindo bypass, captura, treinamento, escrita de coeficientes, troca de banco,
+ativação do DPD e pedido de retreinamento.
+
+Essa integração conjunta foi efetivamente executada no `simv2`. O
+`tb_dpd_top_gmp_metric_integration` passou com RAM/banco A, golden OpenDPD e
+métricas integradas; o `tb_dpd_top_full_system` passou com RAM de captura,
+treinamento, bancos A/B, troca sincronizada, métricas, IRQ e retreinamento. Esse
+item está fechado para a revisão funcional `rtl_v2`.
+
+Esses resultados não equivalem ainda a uma regressão conjunta do top usando as
+duas revisões físicas. A limitação restante do RTL está na consolidação das
+interfaces, latências e testbenches em uma única baseline, e não na ausência de
+referência numérica para os motores DSP.
 
 No OpenLane, o `GMPengine` e o `MACcore` foram transformados em hard macros
 serializadas. RAM de captura e banco de coeficientes usam SRAM hard macros e
@@ -33,34 +47,35 @@ pinout para 128 terminais.
 
 # Gargalo Atual
 
-O gargalo imediato é concluir o hardening do `MACcore` atualizado e executar o
-top com todas as views coerentes. O candidato `mac_core_100m_05` apresenta em
-global-route setup de `+1,47 ns`, hold de `+0,16 ns`, 131.048 células e
-7,659 mm². O primeiro detailed routing terminou com um único short em met1; a
-continuação parte do checkpoint pós-global-route e não repete síntese,
-floorplan, placement ou CTS.
+As oito macros possuem síntese mapeada, CTS, global routing e STA single-corner
+pós-global-route a 100 MHz. Esse é o checkpoint comum usado para comparar área,
+contagem de células e slack. Resultados posteriores existem para alguns blocos,
+mas não são tratados como signoff uniforme enquanto constraints, STA RCX
+multicorner, DRC, LVS e antena não forem comprovados no mesmo nível.
 
-O `GMPengine` já opera com `II=4`, dez lanes e clock alvo de 100 MHz, atendendo
-25 MS/s. Seu resultado preservado apresenta setup de `+3,16 ns` e hold de
-`+0,09 ns` no global-route, além de DRC/LVS limpos. Ainda é necessário produzir
-STA RCX multicorner para consolidar o fechamento temporal do bloco.
-
-A Capture RAM fecha setup/hold em `+1,27/+0,01 ns`, e o Coef Bank em
-`+0,16/+0,82 ns`, ambos em STA pós-route multicorner. As margens são positivas,
-mas o hold da Capture RAM é estreito e deve ser acompanhado na integração.
+O `top_v4_clean_50m_01` gerou os artefatos iniciais de integração a 50 MHz,
+incluindo GDSII e SPEF. Seu STA RCX multicorner ainda é negativo, com pior setup
+de `-4,74 ns` e pior hold de `-1,82 ns`; portanto, ele permanece uma integração
+física experimental para orientar as próximas iterações.
 
 ---
 
 # Próximos Passos
 
-1. concluir DRC/LVS do `mac_core_100m_05`;
-2. instalar no top os LEF/LIB/GDS atuais do MACcore, Capture RAM e Coef Bank;
-3. executar `top_v4_memfix_100m_01` com STA, DRC, antena, LVS e XOR estritos;
-4. implementar o padframe com `sky130_fd_io` para o contrato
+1. portar a regressão conjunta já aprovada no `simv2` para um top com as
+   revisões OpenLane golden do GMPengine e MACcore e com as interfaces atuais
+   de RAM, bancos e métricas;
+2. resolver a duplicidade entre `HDL/rtl` e as variantes físicas, congelando a
+   composição aprovada como implementação HDL canônica;
+3. congelar os hashes do RTL, datasets e testbenches dessa baseline;
+4. tratar os resultados OpenLane existentes como avaliação física experimental
+   até existir um conjunto uniforme de runs completos;
+5. concluir STA, DRC, LVS e antena das macros e do top sem exceções abertas;
+6. implementar o padframe com `sky130_fd_io` para o contrato
    `aQFN/DRQFN-128`;
-5. executar STA RCX multicorner, potência, IR drop, CVC/ERC e simulação
+7. executar STA RCX multicorner, potência, IR drop, CVC/ERC e simulação
    gate-level com SDF;
-6. atualizar artigo e tabela física somente com resultados auditados.
+8. atualizar artigo e tabela física somente com resultados auditados.
 
 Até essas etapas terminarem, os números de global-route são apresentados como
 resultados físicos preliminares, e o top não é classificado como GDS pronto

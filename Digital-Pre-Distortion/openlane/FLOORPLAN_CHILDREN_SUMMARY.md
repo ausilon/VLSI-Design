@@ -32,19 +32,22 @@ Memory macro note:
 - These wrappers are physical-planning replacements for inferred memories and
   need functional timing review before becoming the final RTL contract.
 
-## Route/Signoff Status
+## Baseline Física Comum
 
-| Design | Run tag | Status |
-|---|---|---|
-| `dpd_peripherals_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
-| `dpd_metrics_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
-| `dpd_pico_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
-| `dpd_axi_100m` | `signoff_100m_01` | route ok, Magic DRC ok, LVS errors=0, GDS/LEF ok |
-| `dpd_coef_bank_macro_100m` | `coef_bank_signoff_100m_04` | STA RCX 100 MHz: setup +0.16 ns, hold +0.82 ns; route/LVS/XOR clean |
-| `dpd_capture_ram_macro_100m` | `capture_ram_signoff_100m_13` | STA RCX 100 MHz: setup +1.27 ns, hold +0.01 ns; route/LVS/XOR clean |
+As oito macros são comparadas no checkpoint comum de STA single-corner
+pós-global-route, com período-alvo de 10 ns. Resultados posteriores permanecem
+evidências individuais e não são classificados como signoff uniforme.
 
-Blocos críticos já processados:
+| Macro | Run auditado | Células | Área macro (mm²) | Setup pós-GRT (ns) | Hold pós-GRT (ns) | Dominante Cell |
+|---|---|---:|---:|---:|---:|---|
+| PicoRV32 | `signoff_100m_01` | 10.114 | 0,377 | +3,41 | +0,15 | `sky130_fd_sc_hd__buf_1` (2.422) |
+| AXI control | `signoff_100m_01` | 1.713 | 0,640 | +3,58 | +0,21 | `sky130_fd_sc_hd__buf_1` (395) |
+| Peripherals | `signoff_100m_01` | 755 | 0,044 | +4,21 | +0,19 | `sky130_fd_sc_hd__dfrtp_2` (183) |
+| MetricEngine | `signoff_100m_01` | 2.593 | 0,116 | +2,94 | +0,24 | `sky130_fd_sc_hd__nand2_2` (272) |
+| Capture RAM | `capture_ram_signoff_100m_13` | 741 (inclui 8 SRAM) | 4,140 | +3,93 | +0,26 | `sky130_fd_sc_hd__dfxtp_2` (320) |
+| Coef Bank | `coef_bank_signoff_100m_04` | 154 (inclui 2 SRAM) | 0,845 | +1,84 | +1,65 | `sky130_fd_sc_hd__buf_1` (56) |
+| GMPengine | `gmp_feature_piped_route_relaxed_100m_01` | 223.170 | 11,497 | +3,16 | +0,09 | `sky130_fd_sc_hd__nand2_2` (79.930) |
+| MACcore | `mac_core_100m_05` | 131.048 | 7,758 | +1,47 | +0,16 | `sky130_fd_sc_hd__nand2_2` (35.921) |
 
-- `dpd_gmp_engine_100m`: 223170 células; global-route setup +3.16 ns e hold +0.09 ns;
-- `dpd_mac_engine_100m`: candidato `mac_core_100m_05` com 131048 células;
-  global-route setup +1.47 ns e hold +0.16 ns; detailed route em continuação.
+Os slacks positivos valem para os caminhos restritos desse checkpoint. Eles não
+substituem STA RCX multicorner e não constituem declaração de Fmax ou signoff.
