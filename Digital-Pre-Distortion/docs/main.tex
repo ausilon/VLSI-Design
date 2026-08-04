@@ -68,7 +68,7 @@ Os objetivos específicos atualmente perseguidos são:
     \item definir um contrato de sinal compatível com transmissões de TV 3.0 em canal de 6 MHz, banda-base complexa I/Q e amostragem de 24 MS/s;
     \item validar um modelo GMP de referência em OpenDPD, com métricas de NMSE, EVM e ACLR adequadas para comparação entre algoritmo e HDL;
     \item exportar coeficientes treinados para formato fixo Q2.16 e amostras de entrada/saída para Q1.15;
-    \item implementar em HDL um núcleo GMP completo de 39 termos, com coeficientes complexos e pipeline para throughput de uma amostra por ciclo;
+    \item implementar em HDL um núcleo GMP completo de 39 termos e coeficientes complexos, preservando uma revisão funcional de uma amostra por ciclo e avaliando uma revisão física serializada para SKY130;
     \item integrar o núcleo DPD a uma arquitetura de SoC mínimo com controle AXI-Lite, PicoRV32, bancos duplos de coeficientes, captura ping-pong e motor de métricas;
     \item preparar o código para futura síntese e análise física em tecnologia SKY130 por meio do fluxo OpenLane.
 \end{itemize}
@@ -164,7 +164,7 @@ O periférico DPD é composto pelos seguintes blocos principais:
     \item \texttt{irq\_status\_ctrl}: agregação de eventos, interrupções e solicitação de retreinamento.
 \end{itemize}
 
-O \texttt{gmp\_engine} implementado nesta etapa é compatível com o modelo OpenDPD de 39 termos. Para reduzir pressão de temporização em SKY130, o núcleo foi dividido em estágios de pipeline. O primeiro estágio monta a janela de amostras, o segundo calcula magnitudes, e os estágios seguintes acumulam grupos de termos do GMP. Com o pipeline cheio e os coeficientes previamente carregados para cache interno, o bloco aceita uma amostra por ciclo. Assim, para uma taxa de 24 MS/s, o objetivo mínimo é fechar temporização acima de 24 MHz. Frequências superiores são desejáveis para margem de integração, mas ainda dependem de síntese e análise física.
+O \texttt{gmp\_engine} implementado nesta etapa é compatível com o modelo OpenDPD de 39 termos. A linha funcional \texttt{rtl\_v2} usa pipeline com capacidade de uma amostra por ciclo. Para reduzir área e pressão de roteamento em SKY130, a revisão física foi reorganizada em dez lanes e quatro fases de acumulação, resultando em intervalo de iniciação de quatro ciclos. Nessa revisão, uma taxa de 24 MS/s exige clock mínimo de 96 MHz; a 100 MHz, o throughput arquitetural nominal é 25 MS/s. O checkpoint isolado pós-global-route apresentou setup e hold positivos, mas o fechamento definitivo ainda depende de STA RCX multicorner e da integração do top-level.
 
 O \texttt{metric\_engine} foi atualizado para observar tanto o feedback alinhado quanto a saída do GMP. Atualmente são extraídas métricas leves, adequadas a hardware: magnitude L1 da saída DPD, erro L1 entre referência e feedback, contagem de clipping e diferença de magnitude entre saída DPD e referência. Essas métricas não substituem EVM ou ACLR calculados em software, mas fornecem sinais de supervisão para disparo de retreinamento e diagnóstico em tempo de execução.
 
@@ -182,7 +182,7 @@ As simulações HDL foram executadas no Questa. Os blocos principais compilam se
     \item carregamento do banco de coeficientes OpenDPD;
     \item inferência GMP completa de 39 termos;
     \item coeficientes complexos no formato real/imaginário;
-    \item operação streaming com uma amostra por ciclo;
+    \item operação streaming de uma amostra por ciclo na linha funcional e equivalência numérica independente da revisão física com \texttt{II=4};
     \item validação bit-a-bit contra vetores de referência Q1.15;
     \item extração de métricas a partir da saída real do GMP;
     \item comparação entre métrica em bypass e métrica com DPD ativo;

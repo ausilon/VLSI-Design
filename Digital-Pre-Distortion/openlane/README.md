@@ -98,10 +98,12 @@ como se todos representassem STA RCX, DRC, LVS e signoff equivalentes. Também
 não se declara Fmax a partir de WNS intermediário; a baseline não possui
 constraints e STA extraído multicorner uniformes que sustentem essa declaração.
 
-O `top_v4_clean_50m_01` é a integração física experimental mais recente. Ele
-gerou floorplan, roteamento, SPEF, relatórios STA RCX e GDSII para orientar as
-análises do top. Não representa signoff de chip e não inclui padframe, análise
-de potência, IR drop ou fechamento físico uniforme.
+A baseline publicada mantém o alvo de 100 MHz. As oito macros possuem resultados
+comparáveis no checkpoint pós-global-route, mas as tentativas do top-level não
+fecharam STA RCX multicorner de forma uniforme. Por isso, resultados obtidos com
+outros períodos de clock não são usados nesta baseline e não se declara uma
+frequência final para o chip. O top também não inclui padframe, análise de
+potência, IR drop ou signoff físico completo.
 
 ---
 

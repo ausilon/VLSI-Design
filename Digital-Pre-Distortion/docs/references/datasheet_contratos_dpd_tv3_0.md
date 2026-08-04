@@ -112,7 +112,7 @@ Escopo: contratos de interface e validacao para o DPD digital em ASIC SKY130, co
 | Multiplicadores | Minimizar paralelismo | Dominam area/potencia |
 | Treino | Serial/lento | Atualizacao de 1-5 min permite baixa area |
 | Fast path | Pipelineado | Deve sustentar stream continuo |
-| Clock alvo inicial | 25 a 50 MHz | Folga para 24 Mbps em palavras de 32 bits |
+| Clock do GMP fisico | minimo de 96 MHz; alvo de 100 MHz | Revisao `II=4` deve sustentar 24 MS/s |
 | MIMO futuro | DPD por cadeia | Evita misturar PAs distintos |
 | OpenLane | Usar apos RTL funcional | Sintese antes do GMP real mede pouco |
 

@@ -287,10 +287,11 @@ checkpoint e com constraints completas.
 
 O top-level experimental contém conectividade funcional entre as oito macros,
 FIFOs elásticas nas fronteiras críticas, plano AXI-Lite interno e PDN
-hierárquica. O run mais recente usa die de `9,3 x 9,3 mm` e clock-alvo de
-50 MHz. O contrato de encapsulamento continua prevendo `aQFN/DRQFN-128`, mas o
-padframe físico, a análise de IR drop, potência e o signoff do chip não fazem
-parte da baseline atual.
+hierárquica. A baseline física publicada mantém die de `8,5 x 8,5 mm` e
+clock-alvo de 100 MHz. As tentativas de integração do top ainda não produziram
+fechamento uniforme de STA RCX multicorner. O contrato de encapsulamento
+continua prevendo `aQFN/DRQFN-128`, mas o padframe físico, a análise de IR drop,
+potência e o signoff do chip não fazem parte da baseline atual.
 
 O floorplan foi refinado a partir de uma proposta manual de organização de
 macros. A intenção foi manter o caminho rápido próximo ao `GMPengine`, posicionar
@@ -328,23 +329,23 @@ foram extraídas das netlists mapeadas pelo Yosys.
 | GMPengine | `gmp_feature_piped_route_relaxed_100m_01` | 223.170 | 11,497 | +3,16 | +0,09 | `sky130_fd_sc_hd__nand2_2` (79.930) |
 | MACcore | `mac_core_100m_05` | 131.048 | 7,758 | +1,47 | +0,16 | `sky130_fd_sc_hd__nand2_2` (35.921) |
 
-## Integração física experimental
+## Resultado físico consolidado em 100 MHz
 
 | Item | Resultado |
 |---|---:|
-| Clock-alvo | 50 MHz |
-| Células de integração | 63.320 |
-| Die | 9,3 x 9,3 mm = 86,49 mm² |
-| Setup/hold pós-GRT | +6,97 / +0,02 ns |
-| RCX multicorner nominal | -3,11 / -1,46 ns |
-| Pior RCX multicorner | -4,74 / -1,82 ns |
-| Detailed routing | 0 violações |
-| GDSII | Gerado |
+| Clock-alvo das macros | 100 MHz (`10 ns`) |
+| Checkpoint comum | STA single-corner pós-global-route |
+| Macros niveladas | 8 |
+| Menor setup observado | +1,47 ns (`MACcore`) |
+| Menor hold observado | +0,09 ns (`GMPengine`) |
+| GMPengine | `II=4`, throughput nominal de 25 MS/s a 100 MHz |
+| Signoff uniforme do top | Não demonstrado |
 
-O `top_v4_clean_50m_01` é um run inicial de integração destinado a gerar
-floorplan, roteamento, SPEF, relatórios STA RCX e GDSII para análises
-posteriores. Esses artefatos orientam as próximas iterações até a evolução do
-signoff; o run não é apresentado como circuito fechado para fabricação.
+Esses valores representam o melhor resultado comparável das macros isoladas no
+alvo de 100 MHz. Eles não são combinados com resultados de runs posteriores em
+outros períodos de clock e não demonstram que o top-level tenha fechado
+temporização. O fechamento do top permanece dependente de constraints completas
+e STA extraído multicorner.
 
 Todas as oito macros possuem uma baseline comparável no checkpoint
 pós-global-route. Resultados adicionais de detailed route, DRC, LVS e XOR

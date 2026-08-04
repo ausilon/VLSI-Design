@@ -121,7 +121,9 @@ de roteamento.
 O `GMPengine` preserva o modelo GMP de 39 termos e coeficientes complexos e foi
 serializado em quatro fases para reduzir área. A implementação física atual usa
 dez lanes pipelineadas com latência fixa. Em 100 MHz, o intervalo de iniciação
-de quatro ciclos fornece 25 MS/s e atende o contrato de 24 MS/s.
+de quatro ciclos fornece nominalmente 25 MS/s. O checkpoint isolado
+pós-global-route apresentou timing positivo no alvo de 100 MHz, mas esse
+resultado ainda não equivale a STA RCX multicorner nem a fechamento do top-level.
 
 O `MACcore`, por outro lado, é um bloco de treinamento em background. Mesmo
 serializado, ele mantém folga temporal grande em relação ao alvo de treinamento

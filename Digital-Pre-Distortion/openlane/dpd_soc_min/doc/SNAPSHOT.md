@@ -16,7 +16,7 @@ Observacoes:
 
 - Este snapshot foi criado para exploracao de sintese/floorplan em SKY130.
 - O alvo inicial e o subsistema DPD, nao o SoC completo com PicoRV32.
-- O clock inicial em `config.json` esta em 20 ns, equivalente a 50 MHz.
-- A taxa funcional do projeto validada ate aqui e 24 Msps; 50 MHz da margem
-  para investigar timing antes de decidir o clock final.
+- O clock de 20 ns deste diretório pertence somente ao snapshot exploratório
+  inicial do subsistema `dpd_top`; ele não integra a baseline física consolidada.
+- A baseline comparativa posterior das macros usa período-alvo de 10 ns.
 - `pin_order.cfg` e provisório e deve ser refinado depois da primeira sintese.
