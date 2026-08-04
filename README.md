@@ -261,7 +261,9 @@ amostras Q1.15 e coeficientes Q2.16. Dez lanes processam quatro grupos de termos
 resultando em intervalo de iniciação de quatro ciclos e throughput de
 `Fclk/4`. Cada lane possui contrato de latência fixa e pipeline separado para
 base GMP, produto, combinação complexa e alinhamento de saída. Em 100 MHz, essa
-arquitetura fornece exatamente 25 MS/s, acima do requisito de 24 MS/s.
+arquitetura fornece nominalmente 25 MS/s, acima do requisito de 24 MS/s. Esse é
+o contrato arquitetural; a frequência física final depende do fechamento STA RCX
+multicorner.
 
 O `MACcore` usa a mesma base GMP no caminho lento e executa a atualização NLMS
 sobre snapshots da RAM. A serialização é mais intensa porque o treinamento não
@@ -269,23 +271,18 @@ participa do datapath em tempo real. Após o registro da fronteira de leitura da
 Capture RAM, a FSM recebeu dois ciclos explícitos de espera antes de consumir
 cada palavra. O testbench golden foi repetido após essa alteração.
 
-As duas memórias foram refeitas para fechamento temporal real em 100 MHz. A
-Capture RAM registra entrada, saídas das SRAMs e mux final, enquanto atrasos
-físicos controlados corrigem os caminhos curtos de hold. O banco de
-coeficientes teve pin placement e CTS alinhados aos dois ports das SRAMs. Em
-ambos os casos a integração externa apresenta roteamento detalhado, LVS e XOR
-limpos. O Magic ainda sinaliza regras internas da implementação OpenRAM
-fornecida; essa limitação é registrada separadamente e não é convertida em um
-falso resultado de DRC zero.
+As duas memórias foram preparadas com fronteiras registradas, pin placement
+orientado pelos ports das SRAMs e CTS específico. Elas possuem resultados
+físicos posteriores ao global routing, mas esses resultados não são promovidos
+isoladamente a signoff enquanto as oito macros não forem avaliadas no mesmo
+checkpoint e com constraints completas.
 
-O top-level deixou de ser apenas um scaffold: o core atual contém conectividade
-funcional entre as oito macros, FIFOs elásticas nas fronteiras críticas, plano
-AXI-Lite interno, PDN hierárquica e 108 sinais funcionais externos. O die de
-trabalho está configurado em `8,5 x 8,5 mm`. O contrato de encapsulamento prevê
-`aQFN/DRQFN-128`, composto por 108 sinais funcionais, quatro sinais reservados
-para DFT e 16 terminais de alimentação. O exposed pad deve ser conectado a
-`VSSD/GND`. O padframe físico com células `sky130_fd_io`, a análise de IR drop e
-o signoff do top conectado ainda permanecem em aberto.
+O top-level experimental contém conectividade funcional entre as oito macros,
+FIFOs elásticas nas fronteiras críticas, plano AXI-Lite interno e PDN
+hierárquica. O run mais recente usa die de `9,3 x 9,3 mm` e clock-alvo de
+50 MHz. O contrato de encapsulamento continua prevendo `aQFN/DRQFN-128`, mas o
+padframe físico com células `sky130_fd_io`, a análise de IR drop, potência e o
+signoff do chip permanecem trabalhos posteriores.
 
 O floorplan foi refinado a partir de uma proposta manual de organização de
 macros. A intenção foi manter o caminho rápido próximo ao `GMPengine`, posicionar
@@ -302,29 +299,52 @@ datapath e controle e deixa espaço para uma futura etapa de padframe.
     </td>
     <td align="center" width="30%">
       <img src="Digital-Pre-Distortion/docs/figures/dpd_soc_top_floorplan_v4.png" width="420"><br>
-      <sub>Floorplan V4 adotado para o top conectado (<a href="Digital-Pre-Distortion/docs/figures/dpd_soc_top_floorplan_v4.pdf">PDF</a>).</sub>
+      <sub>Floorplan V4 usado como referência para a integração física (<a href="Digital-Pre-Distortion/docs/figures/dpd_soc_top_floorplan_v4.pdf">PDF</a>).</sub>
     </td>
   </tr>
 </table>
 
-A tabela seguinte contém somente resultados auditados nos runs preservados. Os
-slacks de `GMPengine` e `MACcore` são pós-global-route e ainda não substituem o
-STA RCX multicorner. Nas memórias, os números são pós-roteamento com SPEF e
-múltiplos corners.
+A comparação seguinte foi nivelada no último checkpoint comum comprovado para
+as oito macros: síntese mapeada, CTS, global routing e STA single-corner
+pós-global-route com período-alvo de 10 ns. As contagens e a célula dominante
+foram extraídas das netlists mapeadas pelo Yosys.
 
-| bloco | run auditado | estágio temporal | área mm² | células | setup ns | hold ns | estado físico |
-|---|---|---|---:|---:|---:|---:|---|
-| GMPengine | run físico 100 MHz preservado | global-route STA | 11,498 | 223.170 | +3,16 | +0,09 | detailed route, Magic DRC e LVS limpos; RCX pendente |
-| MACcore | `mac_core_100m_05` | global-route STA | 7,659 | 131.048 | +1,47 | +0,16 | primeiro DRT terminou com um short em met1; continuação a partir do checkpoint em andamento |
-| Capture RAM | `capture_ram_signoff_100m_13` | RCX multicorner | 4,140 | 741 | +1,27 | +0,01 | TritonRoute DRC, LVS e XOR limpos; ressalva OpenRAM no Magic hierárquico |
-| Coef Bank | `coef_bank_signoff_100m_04` | RCX multicorner | 0,845 | 154 | +0,16 | +0,82 | TritonRoute DRC, LVS e XOR limpos; ressalva OpenRAM no Magic hierárquico |
-| Top conectado | próximo run `top_v4_memfix_100m_01` | ainda não executado | 72,250 propostos | n/a | n/a | n/a | aguarda MACcore atualizado e padframe físico |
+| Macro | Run auditado | Células | Área macro (mm²) | Setup pós-GRT (ns) | Hold pós-GRT (ns) | Dominante Cell |
+|---|---|---:|---:|---:|---:|---|
+| PicoRV32 | `signoff_100m_01` | 10.114 | 0,377 | +3,41 | +0,15 | `sky130_fd_sc_hd__buf_1` (2.422) |
+| AXI control | `signoff_100m_01` | 1.713 | 0,640 | +3,58 | +0,21 | `sky130_fd_sc_hd__buf_1` (395) |
+| Peripherals | `signoff_100m_01` | 755 | 0,044 | +4,21 | +0,19 | `sky130_fd_sc_hd__dfrtp_2` (183) |
+| MetricEngine | `signoff_100m_01` | 2.593 | 0,116 | +2,94 | +0,24 | `sky130_fd_sc_hd__nand2_2` (272) |
+| Capture RAM | `capture_ram_signoff_100m_13` | 741 (inclui 8 SRAM) | 4,140 | +3,93 | +0,26 | `sky130_fd_sc_hd__dfxtp_2` (320) |
+| Coef Bank | `coef_bank_signoff_100m_04` | 154 (inclui 2 SRAM) | 0,845 | +1,84 | +1,65 | `sky130_fd_sc_hd__buf_1` (56) |
+| GMPengine | `gmp_feature_piped_route_relaxed_100m_01` | 223.170 | 11,497 | +3,16 | +0,09 | `sky130_fd_sc_hd__nand2_2` (79.930) |
+| MACcore | `mac_core_100m_05` | 131.048 | 7,758 | +1,47 | +0,16 | `sky130_fd_sc_hd__nand2_2` (35.921) |
 
-PicoRV32, AXI-Lite, `MetricEngine` e periféricos possuem hard macros anteriores
-com DRC/LVS limpos, mas seus números antigos não são usados nesta tabela como
-prova de STA pós-route. Eles serão reavaliados no contexto do top conectado.
-Também não se declara Fmax a partir de WNS intermediário: a frequência de
-operação só será consolidada após STA extraído do bloco ou do chip completo.
+## Integração física experimental
+
+| Item | Resultado |
+|---|---:|
+| Clock-alvo | 50 MHz |
+| Células de integração | 63.320 |
+| Die | 9,3 x 9,3 mm = 86,49 mm² |
+| Setup/hold pós-GRT | +6,97 / +0,02 ns |
+| RCX multicorner nominal | -3,11 / -1,46 ns |
+| Pior RCX multicorner | -4,74 / -1,82 ns |
+| Detailed routing | 0 violações |
+| GDSII | Gerado |
+
+O `top_v4_clean_50m_01` é um run inicial de integração destinado a gerar
+floorplan, roteamento, SPEF, relatórios STA RCX e GDSII para análises
+posteriores. Esses artefatos orientam as próximas iterações até a evolução do
+signoff; o run não é apresentado como circuito fechado para fabricação.
+
+Todas as oito macros possuem uma baseline comparável no checkpoint
+pós-global-route. Resultados adicionais de detailed route, DRC, LVS e XOR
+permanecem como evidências individuais e não são usados para elevar
+seletivamente uma linha da tabela. Também não se declara Fmax a partir de WNS
+intermediário: a frequência de operação será consolidada somente depois de
+completar constraints e STA extraído multicorner na baseline física aprovada ou
+no chip completo.
 
 ---
 
