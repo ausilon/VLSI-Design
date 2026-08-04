@@ -37,7 +37,7 @@ métricas L1/EWMA foi feita para manter custo lógico baixo e permitir que o
 controle detecte degradação do sinal sem implementar medições espectrais caras
 em hardware.
 
-## Mapa de Controle e Observabilidade do PicoRV32
+## Mapa de Memória e Registradores do Subsistema DPD
 
 O PicoRV32 controla o sistema por transações AXI-Lite. Ele executa a política
 de operação, configura o DPD e consulta os estados dos blocos, mas não processa

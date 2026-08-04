@@ -240,8 +240,8 @@ firmware, ele pode habilitar o DPD e o bypass, iniciar captura e treinamento,
 programar o alinhamento do feedback e os limiares das métricas, acessar os
 bancos A/B, solicitar a troca sincronizada e consultar estados, métricas e
 interrupções. O mapa completo de memória, registradores e campos está descrito
-na seção [Mapa de Controle e Observabilidade do
-PicoRV32](Digital-Pre-Distortion/HDL/README.md#mapa-de-controle-e-observabilidade-do-picorv32).
+na seção [Mapa de Memória e Registradores do Subsistema
+DPD](Digital-Pre-Distortion/HDL/README.md#mapa-de-memória-e-registradores-do-subsistema-dpd).
 
 ```text
 bypass inicial
