@@ -1,8 +1,7 @@
 # Trabalhos Futuros
 
 Este documento concentra atividades prospectivas do projeto. Os itens abaixo
-não representam resultados concluídos nem evidência de signoff; o estado
-comprovado permanece descrito em [status.md](status.md).
+não representam resultados concluídos nem evidência de signoff.
 
 ## Baseline HDL Canônica
 
