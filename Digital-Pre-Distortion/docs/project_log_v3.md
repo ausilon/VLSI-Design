@@ -1146,6 +1146,5 @@ Errors: 0, Warnings: 0
 ```
 
 Esses resultados fecham a equivalencia numerica isolada dos motores fisicos.
-A pendencia nao e criar do zero uma regressao conjunta, mas portar a regressao
-ja aprovada no `simv2` para um top que instancie essas mesmas revisoes OpenLane
-e os contratos atuais de RAM, bancos e metricas.
+A baseline auditada nao possui uma regressao conjunta que instancie essas mesmas
+revisoes OpenLane com os contratos atuais de RAM, bancos e metricas.

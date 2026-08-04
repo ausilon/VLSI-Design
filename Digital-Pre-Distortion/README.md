@@ -137,7 +137,7 @@ serializadas usadas no OpenLane possuem validação golden independente: o
 GMPengine reproduziu 64 saídas I/Q bit-exatas do OpenDPD, e o MACcore reproduziu
 checkpoints e coeficientes do golden NLMS de software. Portanto, a regressão
 conjunta de RAM, bancos, motores DSP e métricas está fechada para o `rtl_v2`.
-A pendência é portar e repetir essa regressão com as revisões serializadas
+A baseline não contém uma regressão conjunta que use as revisões serializadas
 exatas do OpenLane, cujas latências e interfaces físicas diferem da linha
 funcional.
 
@@ -145,4 +145,5 @@ A implementação OpenLane demonstra viabilidade física de síntese, floorplan,
 placement e roteamento, com resultados positivos isolados de timing, DRC e LVS.
 Esses resultados permanecem experimentais porque não existe ainda um conjunto
 uniforme de runs completos para todas as macros e o top. Padframe, STA RCX
-multicorner final, potência, IR drop e signoff de chip continuam pendentes.
+multicorner final, potência, IR drop e signoff de chip não fazem parte da
+baseline atual.

@@ -281,8 +281,8 @@ O top-level experimental contém conectividade funcional entre as oito macros,
 FIFOs elásticas nas fronteiras críticas, plano AXI-Lite interno e PDN
 hierárquica. O run mais recente usa die de `9,3 x 9,3 mm` e clock-alvo de
 50 MHz. O contrato de encapsulamento continua prevendo `aQFN/DRQFN-128`, mas o
-padframe físico com células `sky130_fd_io`, a análise de IR drop, potência e o
-signoff do chip permanecem trabalhos posteriores.
+padframe físico, a análise de IR drop, potência e o signoff do chip não fazem
+parte da baseline atual.
 
 O floorplan foi refinado a partir de uma proposta manual de organização de
 macros. A intenção foi manter o caminho rápido próximo ao `GMPengine`, posicionar
@@ -357,6 +357,7 @@ no chip completo.
 - [Datasets](Digital-Pre-Distortion/datasets/README.md)
 - [OpenLane/SKY130](Digital-Pre-Distortion/openlane/README.md)
 - [Estado técnico](Digital-Pre-Distortion/docs/status.md)
+- [Trabalhos futuros](Digital-Pre-Distortion/docs/future_work.md)
 - [Log técnico v3](Digital-Pre-Distortion/docs/project_log_v3.md)
 
 ---

@@ -423,10 +423,9 @@ erros e zero warnings.
 
 Assim, a integração conjunta de Capture RAM, Coef Bank, GMPengine, MACcore e
 MetricEngine já foi demonstrada na linha funcional `rtl_v2`, e os dois motores
-físicos possuem referência numérica independente. A pendência de verificação é
-portar essa regressão do `simv2` para um top que instancie exatamente as duas
-revisões serializadas do OpenLane, conciliando suas latências e interfaces, e
-então congelar essa composição como a implementação HDL canônica.
+físicos possuem referência numérica independente. A baseline atual não inclui
+um top de regressão que instancie simultaneamente as duas revisões serializadas
+do OpenLane com as interfaces de RAM, bancos e métricas.
 
 ---
 

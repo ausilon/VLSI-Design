@@ -32,10 +32,10 @@ métricas integradas; o `tb_dpd_top_full_system` passou com RAM de captura,
 treinamento, bancos A/B, troca sincronizada, métricas, IRQ e retreinamento. Esse
 item está fechado para a revisão funcional `rtl_v2`.
 
-Esses resultados não equivalem ainda a uma regressão conjunta do top usando as
-duas revisões físicas. A limitação restante do RTL está na consolidação das
-interfaces, latências e testbenches em uma única baseline, e não na ausência de
-referência numérica para os motores DSP.
+Esses resultados não constituem uma regressão conjunta do top usando as duas
+revisões físicas. A linha funcional e as variantes serializadas possuem
+interfaces e latências distintas e, nesta baseline, não formam uma composição
+HDL única.
 
 No OpenLane, o `GMPengine` e o `MACcore` foram transformados em hard macros
 serializadas. RAM de captura e banco de coeficientes usam SRAM hard macros e
@@ -45,38 +45,15 @@ pinout para 128 terminais.
 
 ---
 
-# Gargalo Atual
+# Limites da Evidência Física
 
 As oito macros possuem síntese mapeada, CTS, global routing e STA single-corner
 pós-global-route a 100 MHz. Esse é o checkpoint comum usado para comparar área,
 contagem de células e slack. Resultados posteriores existem para alguns blocos,
-mas não são tratados como signoff uniforme enquanto constraints, STA RCX
-multicorner, DRC, LVS e antena não forem comprovados no mesmo nível.
+mas constraints completas, STA RCX multicorner, DRC, LVS e antena não possuem
+evidência uniforme para o conjunto das oito macros.
 
 O `top_v4_clean_50m_01` gerou os artefatos iniciais de integração a 50 MHz,
 incluindo GDSII e SPEF. Seu STA RCX multicorner ainda é negativo, com pior setup
 de `-4,74 ns` e pior hold de `-1,82 ns`; portanto, ele permanece uma integração
-física experimental para orientar as próximas iterações.
-
----
-
-# Próximos Passos
-
-1. portar a regressão conjunta já aprovada no `simv2` para um top com as
-   revisões OpenLane golden do GMPengine e MACcore e com as interfaces atuais
-   de RAM, bancos e métricas;
-2. resolver a duplicidade entre `HDL/rtl` e as variantes físicas, congelando a
-   composição aprovada como implementação HDL canônica;
-3. congelar os hashes do RTL, datasets e testbenches dessa baseline;
-4. tratar os resultados OpenLane existentes como avaliação física experimental
-   até existir um conjunto uniforme de runs completos;
-5. concluir STA, DRC, LVS e antena das macros e do top sem exceções abertas;
-6. implementar o padframe com `sky130_fd_io` para o contrato
-   `aQFN/DRQFN-128`;
-7. executar STA RCX multicorner, potência, IR drop, CVC/ERC e simulação
-   gate-level com SDF;
-8. atualizar artigo e tabela física somente com resultados auditados.
-
-Até essas etapas terminarem, os números de global-route são apresentados como
-resultados físicos preliminares, e o top não é classificado como GDS pronto
-para foundry.
+física experimental, não um GDS qualificado para fabricação.

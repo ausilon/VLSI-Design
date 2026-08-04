@@ -74,8 +74,8 @@ drenar a pipeline física completa.
 
 A integração conjunta com Capture RAM, bancos A/B, treinamento e métricas já
 passou no `simv2` usando o `rtl_v2`. Essa evidência não deve ser confundida com
-uma regressão do top físico: ainda falta portar o mesmo cenário para as revisões
-serializadas exatas do GMPengine e do MACcore usadas neste diretório.
+uma regressão do top físico: essa composição com as revisões serializadas exatas
+do GMPengine e do MACcore não está presente nesta baseline.
 
 O `MACcore` é maior que um bloco de controle comum, mas não precisa operar na
 taxa de amostragem. Ele lê snapshots da RAM e executa treinamento em background.
@@ -95,14 +95,13 @@ PicoRV32, AXI-Lite, MetricEngine, periféricos, memórias e motores DSP possuem
 artefatos físicos posteriores em diferentes graus de maturidade. Esses
 resultados continuam úteis para engenharia, mas não são misturados na tabela
 como se todos representassem STA RCX, DRC, LVS e signoff equivalentes. Também
-não se declara Fmax a partir de WNS intermediário: a frequência será consolidada
-somente após completar constraints e STA extraído multicorner na baseline
-aprovada ou no chip completo.
+não se declara Fmax a partir de WNS intermediário; a baseline não possui
+constraints e STA extraído multicorner uniformes que sustentem essa declaração.
 
 O `top_v4_clean_50m_01` é a integração física experimental mais recente. Ele
 gerou floorplan, roteamento, SPEF, relatórios STA RCX e GDSII para orientar as
-iterações seguintes. Não representa signoff de chip; padframe, potência, IR
-drop e fechamento físico uniforme permanecem trabalhos posteriores.
+análises do top. Não representa signoff de chip e não inclui padframe, análise
+de potência, IR drop ou fechamento físico uniforme.
 
 ---
 
