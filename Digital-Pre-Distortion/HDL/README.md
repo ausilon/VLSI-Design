@@ -37,6 +37,138 @@ métricas L1/EWMA foi feita para manter custo lógico baixo e permitir que o
 controle detecte degradação do sinal sem implementar medições espectrais caras
 em hardware.
 
+## Mapa de Controle e Observabilidade do PicoRV32
+
+O PicoRV32 controla o sistema por transações AXI-Lite. Ele executa a política
+de operação, configura o DPD e consulta os estados dos blocos, mas não processa
+as amostras I/Q nem executa as operações matemáticas do GMP ou do NLMS.
+
+O mapa global de memória é:
+
+| Faixa de endereços | Recurso | Acesso pelo firmware |
+|---|---|---|
+| `0x0000_0000` a `0x00FF_FFFF` | SPI Flash XIP | leitura e execução do firmware |
+| `0x1000_0000` a `0x1000_FFFF` | RAM de trabalho | leitura e escrita, 64 KiB |
+| `0x2000_0000` a `0x2000_0FFF` | UART | transmissão, recepção e status |
+| `0x3000_0000` a `0x3000_0FFF` | SPI de debug/controle | transmissão, recepção e status |
+| `0x4000_0000` a `0x4000_0FFF` | subsistema DPD | configuração, comandos, métricas e status |
+
+### Comandos e configurações do DPD
+
+Os registradores abaixo usam como base `DPD_BASE = 0x4000_0000`.
+
+| Offset | Registro/campo | Acesso | Função |
+|---:|---|---|---|
+| `0x000` | `CONTROL[0]` | R/W | habilita ou desabilita o DPD |
+| `0x000` | `CONTROL[1]` | R/W | força o caminho de bypass |
+| `0x000` | `CONTROL[2]` | W1P | inicia uma captura REF/FB |
+| `0x000` | `CONTROL[3]` | W1P | solicita a troca do banco de coeficientes |
+| `0x000` | `CONTROL[4]` | W1P | limpa todos os eventos de interrupção |
+| `0x000` | `CONTROL[5]` | W1P | inicia o treinamento do `MACcore` |
+| `0x008` | `IRQ_STATUS` | R/W1C | consulta e limpa individualmente eventos pendentes |
+| `0x00C` | `IRQ_MASK` | R/W | habilita ou mascara fontes de interrupção |
+| `0x020` | `THRESH_ERROR` | R/W | limiar da métrica de erro REF-FB |
+| `0x024` | `THRESH_CLIP` | R/W | limiar do contador de clipping |
+| `0x028` | `THRESH_DRIFT` | R/W | limiar da métrica de drift DPD-REF |
+| `0x030` | `COEF_ADDR` | R/W | seleciona o endereço do banco de coeficientes |
+| `0x034` | `COEF_WDATA` | R/W | contém o valor signed Q2.16 a ser gravado |
+| `0x038` | `COEF_CTRL[0]` | W1P | grava `COEF_WDATA` no banco A |
+| `0x038` | `COEF_CTRL[1]` | W1P | grava `COEF_WDATA` no banco B |
+| `0x050` | `CAPTURE_CTRL` | R/W | define a quantidade de pares REF/FB da captura |
+| `0x054` | `DELAY_CTRL` | R/W | programa o alinhamento do feedback entre 0 e 255 ciclos |
+| `0x058` | `TRAIN_CTRL` | R/W | define quantas amostras do snapshot entram no treinamento |
+
+`capture_len` e `train_sample_count` possuem dez bits efetivos no RTL atual.
+Os campos W1P geram pulsos de um ciclo; portanto, comandos de captura,
+treinamento e troca de banco não são níveis persistentes.
+
+### Status operacional
+
+O registro `STATUS`, no offset `0x004`, fornece uma visão consolidada do
+subsistema:
+
+| Bit | Nome lógico | Significado |
+|---:|---|---|
+| 0 | `dpd_active` | o caminho DPD está ativo |
+| 1 | `capture_busy` | uma captura está em andamento |
+| 2 | `capture_done` | a captura foi concluída |
+| 3 | `coef_switch_busy` | o controlador de troca está ocupado |
+| 4 | `active_bank` | seleciona o banco ativo: 0 para A e 1 para B |
+| 5 | `irq` | existe ao menos uma interrupção habilitada pendente |
+| 6 | `capture_lock` | o snapshot está bloqueado para leitura do `MACcore` |
+| 7 | `capture_ready` | existe uma captura pronta para consumo |
+| 8 | `train_busy` | o treinamento está em execução |
+| 9 | `train_done` | o treinamento terminou |
+| 10 | `train_error` | o treinador encerrou por condição de erro |
+| 11 | `coef_ready` | o banco inativo recebeu um novo conjunto de coeficientes |
+| 12 | `switch_pending` | existe troca de banco aguardando `sync_event` |
+
+### Métricas e treinamento
+
+| Offset | Registro | Acesso | Informação |
+|---:|---|---|---|
+| `0x010` | `METRIC_POWER` | R | potência L1/EWMA da saída DPD |
+| `0x014` | `METRIC_ERROR` | R | erro L1/EWMA entre referência e feedback |
+| `0x018` | `METRIC_CLIPPING` | R | quantidade saturante de eventos de clipping |
+| `0x01C` | `METRIC_DRIFT` | R | drift L1/EWMA entre a saída DPD e a referência |
+| `0x05C` | `MAC_ERROR_ACC` | R | erro L1 acumulado pelo treinador na época |
+
+Esses valores são inteiros no domínio de ponto fixo. Eles não representam
+diretamente NMSE, EVM ou ACLR em dB. Os três limiares programáveis permitem que
+o firmware ajuste a sensibilidade do pedido de retreinamento ao cenário de
+operação.
+
+### Acesso aos bancos de coeficientes
+
+O firmware seleciona uma posição em `COEF_ADDR`, escreve o dado em
+`COEF_WDATA` e gera um pulso em `COEF_CTRL` para atualizar A ou B. Para leitura,
+o mesmo endereço selecionado aparece em:
+
+| Offset | Registro | Conteúdo |
+|---:|---|---|
+| `0x03C` | `COEF_RDATA_A` | palavra Q2.16 selecionada do banco A |
+| `0x040` | `COEF_RDATA_B` | palavra Q2.16 selecionada do banco B |
+
+Esse mecanismo permite carregar, ler e auditar as 78 palavras usadas pelos 39
+coeficientes complexos. A RAM de captura permanece interna nesta integração; o
+offset `0x060` é reservado e retorna zero.
+
+### Interrupções
+
+O registro `IRQ_STATUS` acumula três eventos. Cada bit pode ser removido por
+escrita de um em seu próprio campo, enquanto `IRQ_MASK` define quais eventos
+contribuem para a entrada `irq[0]` do PicoRV32.
+
+| Bit | Evento |
+|---:|---|
+| 0 | captura concluída |
+| 1 | troca de banco concluída |
+| 2 | métricas solicitaram retreinamento |
+
+### UART e SPI de controle
+
+Na UART, a escrita de um byte em `0x2000_0000` inicia a transmissão. O byte
+recebido é lido em `0x2000_0004`, e `0x2000_0008` informa `rx_valid` e
+`tx_ready`. A leitura do byte recebido limpa `rx_valid`.
+
+Na SPI de debug/controle, a escrita em `0x3000_0000` inicia uma transferência
+de oito bits em modo 0. O byte recebido é lido em `0x3000_0004`, e
+`0x3000_0008` informa se o controlador está disponível. A SPI Flash XIP é uma
+interface separada e somente de leitura no espaço do processador.
+
+### Parâmetros fixos em hardware
+
+O firmware não altera os parâmetros estruturais abaixo, pois eles são
+`parameter` ou `localparam` do RTL:
+
+- mínimo de 10 e máximo de 20 épocas;
+- passo `mu = 1/4` e `epsilon = 1` do NLMS;
+- quantidade e mapeamento dos 39 termos GMP;
+- formatos Q1.15 das amostras e Q2.16 dos coeficientes;
+- limite interno de clipping `CLIP_LEVEL = 30000`;
+- lookahead de duas amostras;
+- organização, latência e intervalo de iniciação do pipeline.
+
 ---
 
 # Matemática dos Blocos de DSP

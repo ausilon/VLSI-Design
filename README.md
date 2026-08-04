@@ -235,6 +235,14 @@ drift  <- drift  - drift/256  + abs((|dpd_i| + |dpd_q|) - (|ref_i| + |ref_q|))
 retrain_request = error > th_error or drift > th_drift or clipping > th_clip
 ```
 
+O PicoRV32 executa a política de operação por meio de um mapa AXI-Lite. Pelo
+firmware, ele pode habilitar o DPD e o bypass, iniciar captura e treinamento,
+programar o alinhamento do feedback e os limiares das métricas, acessar os
+bancos A/B, solicitar a troca sincronizada e consultar estados, métricas e
+interrupções. O mapa completo de memória, registradores e campos está descrito
+na seção [Mapa de Controle e Observabilidade do
+PicoRV32](Digital-Pre-Distortion/HDL/README.md#mapa-de-controle-e-observabilidade-do-picorv32).
+
 ```text
 bypass inicial
 -> captura REF/FB
